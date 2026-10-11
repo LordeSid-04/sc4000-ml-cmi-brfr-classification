@@ -1,0 +1,21 @@
+# Raw and generated datasets stay local.
+data/
+processed_data/
+processed_data_*/
+verification_output/
+audit_results/
+preview/
+inspect_cleaned_data.py
+.local_checks/
+*.zip
+*.npz
+*.npy
+*.parquet
+*.csv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.env.*
+!.env.example
