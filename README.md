@@ -94,16 +94,6 @@ ordered_raw, channels, values, observed = clean_sequence(sequence_dataframe)
 
 The input needs `sequence_id`, `sequence_counter`, and all 332 named sensor columns; unavailable sensors should be present as NaN columns. It does not need a gesture label or demographic columns. Column order is normalized. One call must contain exactly one recording. The CLI processes the supplied training ZIP; it expects each recording to occupy a contiguous block of source rows and rejects repeated noncontiguous sequences.
 
-## Teammate's next steps
-
-1. Split entire recordings by subject, keeping each subject in one split. Save the assignments.
-2. Fit scaling or other learned transforms on training subjects only. Exclude padding and unavailable placeholders from fitted statistics.
-3. Prepare per-sequence features for tree models or padded readings with a separate padding mask for sequence models.
-4. Use `gesture` as the label. Other training-only helper columns (`phase`, `behavior`, `orientation`, `sequence_type`) are not prediction-time input features.
-5. Save label mapping, scaling parameters and feature/padding choices. Reuse exactly the same transforms for validation and inference.
-
-This cleaning handoff does not implement gravity removal, handedness mirroring, sensor dropout, scaling, model features, sequence truncation or labels. It also does not correct physically unusual readings other than the documented missing/invalid cases.
-
 ## Audit and verification
 
 Optional full audit:
