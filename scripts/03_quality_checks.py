@@ -98,6 +98,8 @@ def main():
     lengths_ok = all(sl.stop - sl.start == n for sl, n in zip(slices, seqs['rows']))
     check('row slices match recording lengths', lengths_ok)
     check('pipeline config: smoothing off', meta['pipeline_config']['features']['smooth_sigma'] == 0.0)
+    check('label-tuned orientation disabled for validated dataset',
+          not meta['pipeline_config']['fix_upside_down'] and not meta['pipeline_config']['mirror_left'])
 
     summary = {'passed': sum(c['pass'] for c in checks.values()), 'total': len(checks), 'checks': checks}
     Path('outputs/verification').mkdir(parents=True, exist_ok=True)

@@ -77,7 +77,7 @@ def main():
     print(json.dumps(result, indent=2))
     Path('outputs/verification').mkdir(parents=True, exist_ok=True)
     Path('outputs/verification/parity.json').write_text(json.dumps(result, indent=2), encoding='utf-8')
-    sys.exit(1 if mismatched else 0)
+    sys.exit(1 if mismatched or test_ok != test.sequence_id.nunique() else 0)
 
 
 if __name__ == '__main__':

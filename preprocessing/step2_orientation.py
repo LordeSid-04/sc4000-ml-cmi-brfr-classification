@@ -40,6 +40,9 @@ class FrameChange:
         return m
 
 
+# Exploratory settings selected with gesture labels from the WHOLE training set.
+# These are disabled in PipelineConfig by default. Do not use them to claim
+# held-out validation gains unless independently established or fit per fold.
 # Selected on the training data:
 # - left hand: mirror x (agreement with right-handers 0.38 -> 0.64, equal to their
 #   own 0.64), swap sensors 3<->5, images flipped left-right on sensors 1/2/4 and

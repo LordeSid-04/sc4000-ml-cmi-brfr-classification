@@ -8,7 +8,7 @@ Stages:
   2. build                clean + orient + features + labels for all 8,151 recordings,
                           written to a candidate folder (data/processed_candidate/)
   3. parity check         the Kaggle predict() path gives exactly the training features
-  4. quality checks       22 checks on the candidate dataset
+  4. quality checks       23 checks on the candidate dataset
   5. publish              ONLY if 1-4 all pass: the candidate replaces data/processed/
                           and the large files are zipped for the GitHub Release
 
@@ -44,10 +44,18 @@ def run_stage(name, args):
 def remove_old(old):
     """Delete the previous build. Windows/OneDrive can briefly lock files that another
     program has open; that only leaves a stale copy behind, so it is a warning."""
-    shutil.rmtree(old, ignore_errors=True)
+    safe_remove(old, ignore_errors=True)
     if old.exists():
         print(f'warning: could not fully delete {old.relative_to(ROOT)} (a file is open elsewhere); '
               'delete it by hand, the new data is already in place')
+
+
+def safe_remove(path, ignore_errors=False):
+    """Restrict recursive removal to the two generated folders under this repo."""
+    allowed = {(ROOT / 'data' / name).resolve() for name in ('processed_old', 'processed_candidate')}
+    if path.is_symlink() or path.resolve() not in allowed:
+        raise ValueError(f'Refusing to remove unexpected path: {path}')
+    shutil.rmtree(path, ignore_errors=ignore_errors)
 
 
 def publish():
@@ -84,7 +92,7 @@ def main():
     candidate = str(CANDIDATE.relative_to(ROOT))
 
     if CANDIDATE.exists():
-        shutil.rmtree(CANDIDATE)
+        safe_remove(CANDIDATE)
     stages = [('unit tests', ['-m', 'pytest', '-q', 'tests']),
               ('build dataset', ['scripts/01_build_dataset.py', '--out', candidate, *data]),
               ('parity check', ['scripts/02_parity_check.py', '--processed', candidate, *data]),

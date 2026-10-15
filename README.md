@@ -8,7 +8,7 @@ what is wrong with it, how we clean it, which features we build and why, and how
 **Contents:** [1. Background](#1-background) · [2. Why the raw data needs cleaning](#2-why-the-raw-data-needs-cleaning) ·
 [3. Cleaning](#3-cleaning) · [4. Putting everyone in the same position](#4-putting-everyone-in-the-same-position) ·
 [5. Features](#5-features) · [6. Labels, folds and model input](#6-labels-folds-and-model-input) ·
-[7. Proof that it helps](#7-proof-that-it-helps) · [8. Output files](#8-output-files) ·
+[7. Validation and evidence](#7-validation-and-evidence) · [8. Output files](#8-output-files) ·
 [9. Using it: two ways](#9-using-it-two-ways) · [10. Code and rebuilding](#10-code-and-rebuilding)
 
 ---
@@ -40,7 +40,7 @@ everyday gestures, such as drinking, waving or texting. The task is to recognise
 |---|---|---|
 | Distance pixels read `-1` when nothing is in range | **58%** of all ToF pixels | `-1` sits below every real distance, so a model reads "nothing there" as "closer than anything" |
 | A quaternion can jump between `q` and `−q` (the same rotation) | **13,644** jumps in **4,730** recordings (58%) | looks like a sudden full twist of the wrist that never happened |
-| Whole sensors missing for a recording | rotation: 50 recordings, temperature: 104, distance: 96, sensor 5 alone: ~480 | NaN breaks most models; filling with a fake value invents a reading |
+| Whole sensors missing for a recording | rotation: 50 recordings, temperature: 96, distance: 96, sensor 5 alone: ~480 | NaN breaks most models; filling with a fake value invents a reading |
 | **10 left-handed** people wear the device on the other wrist | 1,020 recordings (12.5%) | their movements are a mirror image of everyone else's |
 | **2 people wore the device upside down** | SUBJ_019262, SUBJ_045235 | all their signals are rotated 180° |
 | Gravity (9.8 m/s²) dominates the accelerometer | every row | the same gesture looks different sitting vs lying down, because gravity points along a different axis |
@@ -56,14 +56,16 @@ people, so it can run unchanged inside Kaggle's `predict()`.
 | 1 | **Order rows** | sort by `sequence_counter`, drop duplicates | a safety step. The training data is already ordered, but Kaggle input is not guaranteed to be |
 | 2 | **Fill gaps** | a gap inside a recording is filled by linear interpolation. A sensor that is missing for the **whole** recording stays empty, with a flag (`rot_missing`, `thm_missing`, `tof_missing`) | never invent a reading. The model is told the sensor is off instead of being fed fake numbers |
 | 3 | **Fix quaternion sign flips** | flip `q` to `−q` whenever it jumps away from the previous row | removes the fake "full twist" jumps (13,644 of them) |
-| 4 | **Distance → proximity** | `proximity = 1 − distance / 255`, so 1 = touching and 0 = far. `-1` ("nothing there") becomes **0 = far** | keeps the physical meaning: "nothing in range" really is the farthest possible. An earlier version mapped `-1` to "touching", the exact opposite |
+| 4 | **Distance → proximity** | `proximity = 1 − distance / 255`, so 1 = touching and 0 = far. `-1` becomes **0 proximity** | an explicit no-object modelling convention; missing NaN readings remain distinct and invalid-pixel flags are retained |
 
 The cleaning **repairs** bad input instead of crashing, because one crash on Kaggle fails the whole
 submission. For checking the training data there is also a `strict=True` mode that stops on anything unexpected.
 
 ## 4. Putting everyone in the same position
 
-`preprocessing/step2_orientation.py`. The same gesture should produce the same signal no matter who does it.
+`preprocessing/step2_orientation.py` contains **exploratory corrections, disabled by default**.
+Their settings were chosen using labels from all subjects, so the validated dataset does not apply them.
+The following describes the optional functions, not the default processing.
 
 | Fix | Who | What it does |
 |---|---|---|
@@ -97,13 +99,13 @@ Section 9 shows the two ways models use them: per time step (neural networks) or
 | **Turning speed** | 4 | `angular_vel_x/y/z`, `angular_distance` | how fast the wrist rotates, for example twisting while pulling hair |
 | **Temperature** | 11 | `thm_1..5`, `thm_mean`, `thm_1..5_diff` | skin is warm. Shows when the hand is next to the body and when it arrives there |
 | **Distance per sensor** | 25 | `tof_k_mean/max/std/valid_frac/mean_diff` | how close something is, the closest point, and how it changes |
-| **Distance regions** | 45 | `tof_k_r00..r22` (3×3 grid per sensor) | **where** in the image the object is (centre vs edge). The most valuable single step (section 7) |
+| **Distance regions** | 45 | `tof_k_r00..r22` (3×3 grid per sensor) | **where** in the image the object is (centre vs edge); a candidate spatial feature |
 | **Sensor flags** | 3 | `rot_missing`, `thm_missing`, `tof_missing` | tell the model which sensors were available |
 | **Position** | 1 | `time_frac` | 0 = start, 1 = end of the recording |
 | | **117** | | |
 
-We tested light smoothing before computing jerk and turning speed. It **lowered** the score, because it
-removes the fine detail of scratching, so it is switched off.
+Smoothing is switched off. Earlier exploratory comparisons suggested a decrease, but that comparison
+is not a separately held-out causal result.
 
 ## 6. Labels, folds and model input
 
@@ -122,33 +124,31 @@ removes the fine detail of scratching, so it is switched off.
   **switching off temperature and distance 50% of the time**, so models learn to cope with the motion-only
   half of the test set.
 
-## 7. Proof that it helps
+## 7. Validation and evidence
 
-Each step was tested with the same LightGBM model and the same 5 person-based folds. "Motion only" blanks
-temperature and distance, like half of the test set.
+The earlier orientation axes, sensor permutations and image flips were selected using gesture labels
+from the complete dataset before cross-validation. The previous 0.815 / 0.740 scores and orientation
+ablation gains were exploratory, not strictly held-out evidence, and are withdrawn as validation claims.
 
-| Pipeline | All sensors | Motion only |
-|---|---|---|
-| Raw data, missing values set to 0 | 0.750 | 0.663 |
-| + cleaning and temperature/distance summaries | 0.764 | 0.670 |
-| + statistics from the end of the recording | 0.790 | 0.707 |
-| + upside-down fix | 0.798 | 0.710 |
-| + left-hand mirroring | 0.807 | 0.709 |
-| + gravity removal | 0.807 | 0.722 |
-| + all other features | 0.807 | 0.730 |
-| **Final (without smoothing)** | **0.815** | **0.740** |
+The validated dataset now uses `PipelineConfig()` with `mirror_left=False` and
+`fix_upside_down=False`. Neither globally label-tuned correction is applied to training, validation
+or inference. The optional functions remain available for exploration. Using them in a claimed held-out
+experiment requires independent physical evidence or fitting only on each fold's training subjects.
 
-**In total: +0.065 with all sensors and +0.078 with motion only.** Removing a single step from the full pipeline:
+After rebuilding, run `python scripts/04_validate_trees.py`. It evaluates the conservative pipeline
+using the shared subject-grouped folds and saves parameters, per-fold scores and aggregate results to
+`data/processed/validation.json`. The features and reference model settings are fixed for this run.
+This is a grouped-CV reference, not an untouched final test score; repeated tuning on these folds can
+still overfit them.
 
-| Removed | Score drop | Folds where it hurts |
-|---|---|---|
-| distance regions | −0.013 | 5 of 5 |
-| `-1` as "far" (back to "touching") | −0.011 | 5 of 5 |
-| left-hand mirroring | −0.010 | 5 of 5 |
-| upside-down fix | −0.006 | 4 of 5 |
+Reference run on 15 October 2026 (LightGBM 4.7.0, five subject-grouped folds):
 
-Quaternion sign fixing and gravity removal made no difference for trees once the other rotation features were
-present. They are physically correct and may still help neural networks.
+| Inputs | Mean fold score | Fold standard deviation | Pooled out-of-fold score |
+|---|---:|---:|---:|
+| All sensors | 0.7964 | 0.0081 | 0.7963 |
+| Motion only | 0.7302 | 0.0138 | 0.7305 |
+
+Fold spread is not a confidence interval. Full settings and per-fold results are in `validation.json`.
 
 ## 8. Output files
 
@@ -163,9 +163,14 @@ Everything is in `data/processed/`. All files list the recordings in the **same 
 | `scalers/` | neural networks | normalisation per fold (`fold0-4.json`) and for the final model (`all.json`) |
 | `canonical/` | augmentation | the cleaned, position-corrected sensor signals |
 | `folds.csv`, `meta.json` | reference | person → fold; feature names and settings |
+| `validation.json` | evaluation | fixed grouped-CV parameters and scores (generated by the validation script) |
 
-`features.npz` and `canonical/` are too big for git. Download `processed_large_files.zip` from the
-repository's **Releases** page and unzip it in the repository folder.
+`features.npz` and `canonical/` are excluded from git. **There is currently no published Release download.**
+Rebuild them from the original competition ZIP with the command in section 10. The runner also creates
+`outputs/release/processed_large_files.zip` locally for optional sharing; creating this archive does not
+upload a GitHub Release. Keep large files paired with metadata and scalers from the same build.
+The tree tables and scalers in this branch have been rebuilt with orientation corrections disabled.
+Do not reuse an older cached `features.npz` or `canonical/` folder with them; rebuild those arrays first.
 
 ## 9. Using it: two ways
 
@@ -179,7 +184,7 @@ The same 117 features come in two shapes. Use either one, or train both and aver
 | How the 795 / 128 come about | each of the 113 sensor features is summarised 7 ways (mean, std, min, max, mean and std of the last 25%, last value) = 791, + 3 flags + length | the last 128 time steps, padded at the start if shorter, with a mask |
 | Missing sensors (`NaN`) | handled by the tree itself | the scaler turns them into 0; the flags tell the model |
 | Motion-only test half | train on `tree_full` and `tree_imu` stacked | `augment()` switches temperature/distance off 50% of the time |
-| Effort | minutes to train; the example below scores about **0.81 / 0.74** (all sensors / motion only, mean of 5 folds) | slower, but can learn the timing of a gesture |
+| Effort | minutes to train; reference scores are recorded in `validation.json` | slower, but can learn the timing of a gesture |
 
 Both use the same labels and folds from `sequences.csv`. Always train on `fold != k` and validate on
 `fold == k`. Score with `competition_score()`:
@@ -287,20 +292,25 @@ preprocessing/               the pipeline, in the order it runs
 scripts/
   01_build_dataset.py          builds data/processed/
   02_parity_check.py           Kaggle preprocess() == training features
-  03_quality_checks.py         22 checks on the built data
-tests/test_preprocessing.py  32 unit tests
+  03_quality_checks.py         23 checks on the built data
+  04_validate_trees.py         fixed subject-grouped reference evaluation
+tests/test_preprocessing.py  34 unit tests
 run_pipeline.py              runs everything above
 ```
 
 Setup and rebuild:
 
+Download the original competition ZIP from Kaggle's Data page first (joining the competition may be
+required), then substitute its location below. A separate Kaggle command-line installation is not needed.
+
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
-kaggle competitions download -c cmi-detect-behavior-with-sensor-data -p data/raw
-.\.venv\Scripts\python.exe run_pipeline.py
+.\.venv\Scripts\python.exe run_pipeline.py --data "C:\path\to\cmi-detect-behavior-with-sensor-data.zip"
+.\.venv\Scripts\python.exe scripts/04_validate_trees.py
 ```
 
 `run_pipeline.py` runs the tests, builds the data, checks that the Kaggle path gives identical features, and
-runs 22 quality checks: no person in two folds, all gestures in every fold, no label leakage, valid scaling,
+runs 23 quality checks: no person in two folds, all gestures in every fold, no label leakage, valid scaling,
 and more. It replaces `data/processed/` **only if every check passes**, in about 5 minutes.
+The separate tree-validation command trains five reference models and updates `validation.json`.

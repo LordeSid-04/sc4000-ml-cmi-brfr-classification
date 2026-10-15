@@ -159,8 +159,8 @@
   "pipeline_config": {
     "continuity": true,
     "tof_no_object": "far",
-    "fix_upside_down": true,
-    "mirror_left": true,
+    "fix_upside_down": false,
+    "mirror_left": false,
     "features": {
       "gravity": true,
       "engineered": true,

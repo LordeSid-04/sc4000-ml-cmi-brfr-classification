@@ -12,7 +12,7 @@ from preprocessing.constants import ACC, GRAVITY, ROT, THM, TOF
 from preprocessing.step3_features import FeatureConfig, gravity_in_device_frame, sequence_features
 from preprocessing.step4_labels import competition_score, initial_state, phase_of, sequence_labels
 from preprocessing.step2_orientation import MIRROR, UPSIDE_DOWN, apply_frame_change, canonicalize
-from preprocessing.pipeline import preprocess
+from preprocessing.pipeline import PipelineConfig, demographic_values, preprocess
 from preprocessing.step5_shaping import Scaler, fixed_length, make_folds, tree_summary
 
 UP = np.array([0.0, 0.0, GRAVITY])
@@ -148,6 +148,22 @@ class CleaningTests(unittest.TestCase):
 
 
 class OrientationTests(unittest.TestCase):
+    def test_default_pipeline_does_not_use_globally_tuned_orientation(self):
+        config = PipelineConfig()
+        self.assertFalse(config.mirror_left)
+        self.assertFalse(config.fix_upside_down)
+        frame = recording()
+        frame['subject'] = 'SUBJ_019262'
+        demo = pd.DataFrame({'subject': ['SUBJ_019262'], 'handedness': [0]})
+        out = preprocess(frame, demo)
+        np.testing.assert_allclose(out.clean.acc, clean_sequence(frame).acc)
+
+    def test_missing_demographics_never_selects_another_person(self):
+        demo = pd.DataFrame({'subject': ['WRONG'], 'handedness': [0]})
+        self.assertEqual(demographic_values(demo, 'ACTUAL'), ('ACTUAL', None))
+        with self.assertRaises(ValueError):
+            demographic_values(pd.concat([demo, demo]), None)
+
     def test_frame_changes_keep_physics_consistent(self):
         seq = clean_sequence(recording())
         self.assertLess(gravity_consistency_error(seq), 1e-9)

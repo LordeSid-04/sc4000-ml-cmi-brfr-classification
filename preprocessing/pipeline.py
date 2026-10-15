@@ -22,8 +22,10 @@ from .step2_orientation import canonicalize
 class PipelineConfig:
     continuity: bool = True
     tof_no_object: str = 'far'
-    fix_upside_down: bool = True
-    mirror_left: bool = True
+    # The proposed corrections were selected using labels from all subjects.
+    # Keep them opt-in for exploratory work; held-out evaluation uses neither.
+    fix_upside_down: bool = False
+    mirror_left: bool = False
     features: FeatureConfig = field(default_factory=FeatureConfig)
 
 
@@ -45,8 +47,10 @@ def demographic_values(demographics, subject=None):
     if demographics is None:
         return subject, None
     demo = to_pandas(demographics)
-    if subject is not None and 'subject' in demo and (demo['subject'] == subject).any():
+    if subject is not None and 'subject' in demo:
         demo = demo[demo['subject'] == subject]
+    elif subject is None and len(demo) != 1:
+        raise ValueError('A subject or exactly one demographics row is required')
     if len(demo) == 0:
         return subject, None
     row = demo.iloc[0]
