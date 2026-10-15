@@ -1,230 +1,253 @@
-# SC4000 · CMI – Detect Behavior with Sensor Data: preprocessed data for modelling
+# SC4000 · CMI – Detect Behavior with Sensor Data: preprocessing
 
-Everything you need to train models for the Kaggle competition
-[CMI – Detect Behavior with Sensor Data](https://www.kaggle.com/competitions/cmi-detect-behavior-with-sensor-data).
-The raw sensor data is already cleaned and turned into features. You load the files and train.
+This repository turns the raw sensor recordings of the Kaggle competition
+[CMI – Detect Behavior with Sensor Data](https://www.kaggle.com/competitions/cmi-detect-behavior-with-sensor-data)
+into clean, consistent features that the modelling team trains on. Below: what the data looks like,
+what is wrong with it, how we clean it, which features we build and why, and how much each step helps.
 
-**The task:** a wrist device records motion, temperature and distance while a person does one of 18
-gestures. Predict the gesture. 8 gestures are BFRBs (hair pulling, skin pinching, ...), 10 are everyday gestures.
+**Contents:** [1. Background](#1-background) · [2. Why the raw data needs cleaning](#2-why-the-raw-data-needs-cleaning) ·
+[3. Cleaning](#3-cleaning) · [4. Putting everyone in the same position](#4-putting-everyone-in-the-same-position) ·
+[5. Features](#5-features) · [6. Labels, folds and model input](#6-labels-folds-and-model-input) ·
+[7. Proof that it helps](#7-proof-that-it-helps) · [8. Output files](#8-output-files) ·
+[9. Using it](#9-using-it) · [10. Code and rebuilding](#10-code-and-rebuilding)
 
 ---
 
-## 1. Setup (once)
+## 1. Background
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
+People wore a wrist device (Helios) while doing one of **18 gestures**. Eight of them are
+**BFRBs** (body-focused repetitive behaviours such as hair pulling, skin pinching and scratching). Ten are
+everyday gestures, such as drinking, waving or texting. The task is to recognise the gesture from the sensors.
 
-1. **Small data files** (labels, folds, tree features, scalers) come with the repo in `data/processed/`.
-2. **Big data files** (`features.npz`, `canonical/`): download `processed_large_files.zip` from this
-   repo's **Releases** page and unzip it **in the repo folder**. The files land in `data/processed/`.
-   You only need these for neural networks.
-3. **Raw Kaggle data** (only needed to rebuild or to test the Kaggle submission):
-   `kaggle competitions download -c cmi-detect-behavior-with-sensor-data -p data/raw`
-
-## 2. What is in `data/processed/`
-
-| File | Use it for | What it is |
+| Sensor | Columns | What it measures |
 |---|---|---|
-| `sequences.csv` | **everything** | one row per recording (8,151): `sequence_id`, `subject`, labels, `fold`, and `start_row`/`rows` to find its rows in `features.npz` |
-| `tree_full.parquet` | **tree models** (LightGBM, XGBoost, ...) | one row per recording, 795 features, all sensors |
-| `tree_imu.parquet` | **tree models** | the same, but with temperature and distance sensors blanked (see section 5) |
-| `features.npz` | **neural networks** | `features`: 574,945 rows × 117 features (one row per time step); `phase`: per-row phase label |
-| `scalers/fold0-4.json`, `all.json` | **neural networks** | mean/std to normalise the 117 features |
-| `canonical/` | **augmentation** (optional) | the cleaned sensor signals, so you can make new training variants |
-| `folds.csv` | cross-validation | which subject is in which fold (also in `sequences.csv`) |
-| `meta.json` | reference | the 117 feature names, fixed length `L = 128`, gesture list |
+| Accelerometer | `acc_x/y/z` | movement + gravity, in m/s² |
+| Rotation | `rot_w/x/y/z` | how the wrist is turned, as a quaternion |
+| Thermopiles (5) | `thm_1..5` | temperature of whatever the sensor faces, in °C |
+| Time-of-flight (5) | `tof_1..5_v0..v63` | distance images, 8×8 pixels per sensor |
 
-All rows of `sequences.csv`, `tree_*.parquet` and `canonical/` are in the **same order**.
+- **Data size:** 8,151 recordings, 574,945 rows (about 10 rows per second) and 81 people. Recordings are
+  29–700 rows long, with a median of 59.
+- **What happens in a recording:** the hand moves to the target (for example the head), pauses, then
+  performs the gesture. **The gesture is always the last part.**
+- **The test set:** it contains **new people**, and in **about half of it only the accelerometer and
+  rotation work** (no temperature or distance).
+- **The score:** half is "BFRB or not?" and half is "which BFRB?".
 
-## 3. Labels and the score
+## 2. Why the raw data needs cleaning
 
-Columns in `sequences.csv`:
-
-| Column | Values | Notes |
+| Problem in the raw data | How common | Why it hurts a model |
 |---|---|---|
-| `gesture_id` | 0–17 | **main target.** `0–7` are the BFRBs, `8–17` the others. Names: `preprocessing.constants.GESTURES` |
-| `gesture` | text | the same as text |
-| `score_id` | 0–8 | the 9 classes Kaggle scores (8 BFRBs + 1 "non_target") |
-| `is_target` | 0 / 1 | BFRB or not |
-| `orientation`, `initial_state` | text | body position and starting state. Optional extra targets, **never** inputs |
+| Distance pixels read `-1` when nothing is in range | **58%** of all ToF pixels | `-1` sits below every real distance, so a model reads "nothing there" as "closer than anything" |
+| A quaternion can jump between `q` and `−q` (the same rotation) | **13,644** jumps in **4,730** recordings (58%) | looks like a sudden full twist of the wrist that never happened |
+| Whole sensors missing for a recording | rotation: 50 recordings, temperature: 104, distance: 96, sensor 5 alone: ~480 | NaN breaks most models; filling with a fake value invents a reading |
+| **10 left-handed** people wear the device on the other wrist | 1,020 recordings (12.5%) | their movements are a mirror image of everyone else's |
+| **2 people wore the device upside down** | SUBJ_019262, SUBJ_045235 | all their signals are rotated 180° |
+| Gravity (9.8 m/s²) dominates the accelerometer | every row | the same gesture looks different sitting vs lying down, because gravity points along a different axis |
+| Recordings have different lengths | 29–700 rows | neural networks need a fixed input size |
 
-**Kaggle score** = 0.5 × F1(BFRB vs not) + 0.5 × macro F1 over the 9 classes. Use
-`preprocessing.step4_labels.competition_score(true_gestures, predicted_gestures)`, which returns
-`(score, binary_f1, macro_f1)`.
+## 3. Cleaning
 
-**Phase** (in `features.npz`, one per row): `0` moving the hand, `1` pausing at the target, `2` doing the
-gesture. The gesture is always at the **end** of a recording. Phase is an optional extra target for neural networks.
+`preprocessing/step1_cleaning.py`, applied to **one recording at a time**. It uses no labels and no other
+people, so it can run unchanged inside Kaggle's `predict()`.
 
-## 4. Cross-validation: always use the `fold` column
+| # | Step | What it does | Why |
+|---|---|---|---|
+| 1 | **Order rows** | sort by `sequence_counter`, drop duplicates | a safety step. The training data is already ordered, but Kaggle input is not guaranteed to be |
+| 2 | **Fill gaps** | a short gap inside a recording is filled by linear interpolation. A sensor that is missing for the **whole** recording stays empty, with a flag (`rot_missing`, `thm_missing`, `tof_missing`) | never invent a reading. The model is told the sensor is off instead of being fed fake numbers |
+| 3 | **Fix quaternion sign flips** | flip `q` to `−q` whenever it jumps away from the previous row | removes the fake "full twist" jumps (13,644 of them) |
+| 4 | **Distance → proximity** | `proximity = 1 − distance / 255`, so 1 = touching and 0 = far. `-1` ("nothing there") becomes **0 = far** | keeps the physical meaning: "nothing in range" really is the farthest possible. An earlier version mapped `-1` to "touching", the exact opposite |
 
-`fold` (0–4) puts each **subject** in exactly one fold. The test set contains unseen people, so a subject
-must never be in train and validation at the same time. Train on `fold != k`, validate on `fold == k`.
-**Do not make your own random split**: scores will look too good and won't match Kaggle.
+The cleaning **repairs** bad input instead of crashing, because one crash on Kaggle fails the whole
+submission. For checking the training data there is also a `strict=True` mode that stops on anything unexpected.
 
-## 5. Important: half the test set has motion sensors only
+## 4. Putting everyone in the same position
 
-About half of the hidden test recordings have only the motion sensors (IMU: acceleration + rotation).
-Temperature (`thm`) and distance (`tof`) are switched off. Your model must work in both cases:
+`preprocessing/step2_orientation.py`. The same gesture should produce the same signal no matter who does it.
 
-- **Trees:** train on `tree_full` **and** `tree_imu` stacked together (as below), and report both scores.
-- **Neural networks:** use the `augment()` function (section 6). It blanks temperature/distance 50% of the time.
+| Fix | Who | What it does |
+|---|---|---|
+| **Upside-down fix** | the 2 people who wore the device upside down | rotate all signals 180° back. Sensors 2↔4 and 3↔5 swap places and distance images turn 180° |
+| **Left-hand mirroring** | the 10 left-handed people | mirror the x-axis so they look like right-handers. Applied to **every** sensor: acceleration, rotation, sensor positions (3↔5 swap) and distance images (flipped left–right on sensors 1, 2, 4, up–down on 3, 5, which are mounted sideways) |
 
-Missing sensors appear as `NaN` in the features, and the flags `rot_missing`, `thm_missing`, `tof_missing` say which.
+These settings were **measured on the data, not guessed**. We compared each person's movement pattern with
+the right-handed majority and picked the transformation that matches best:
+- **Left-handers:** agreement rises from **0.38 to 0.64**, the same as right-handers have with each other (0.64).
+- **Upside-down people:** agreement rises from **−0.20 to 0.62**.
 
-## 6. Examples
+*Limitation:* the upside-down fix only knows these 2 training people. A new upside-down person in the test
+set would not be detected (this harms no one else).
 
-### Tree model (LightGBM)
+## 5. Features
+
+`preprocessing/step3_features.py` turns each cleaned row into **117 features**. A feature that cannot exist,
+for example temperature when the sensor is off, is `NaN`.
+
+| Group | Features | What it captures, and why it helps |
+|---|---|---|
+| **Raw acceleration** | `acc_x/y/z`, `acc_mag` | the base movement signal |
+| **Gravity removed** | `linear_acc_x/y/z`, `linear_acc_mag` | the hand's own movement without gravity, so the same gesture looks the same sitting or lying. Gravity is computed from the rotation, or estimated from the slow part of the signal when rotation is missing |
+| **Wrist tilt** | `gravity_dir_x/y/z` | which way the wrist points. A hand at the head is tilted differently from a hand at the knee |
+| **Up/down vs sideways** | `linear_acc_vertical`, `linear_acc_horizontal` | movement direction in the room, independent of how the watch sits |
+| **Rotation** | `rot_w/x/y/z`, `rot6d_1..6` | wrist orientation. The 6D version has no `q`/`−q` ambiguity and is easier for networks to learn |
+| **Jerk** | `jerk_x/y/z`, `jerk_mag` | how fast acceleration changes. Scratching and pulling are short, jerky movements |
+| **Direction change** | `acc_cos_sim` | how much the movement direction changes between rows (back-and-forth motion) |
+| **Turning speed** | `angular_vel_x/y/z`, `angular_distance` | how fast the wrist rotates, for example twisting while pulling hair |
+| **Temperature** | `thm_1..5`, `thm_mean`, `thm_1..5_diff` | skin is warm. Shows when the hand is next to the body and when it arrives there |
+| **Distance per sensor** | `tof_k_mean/max/std/valid_frac/mean_diff` | how close something is, the closest point, and how it changes |
+| **Distance regions** | `tof_k_r00..r22` (3×3 grid per sensor) | **where** in the image the object is (centre vs edge). The most valuable single step (section 7) |
+| **Sensor flags** | `rot_missing`, `thm_missing`, `tof_missing` | tell the model which sensors were available |
+| **Position** | `time_frac` | 0 = start, 1 = end of the recording |
+
+We tested light smoothing before computing jerk and turning speed. It **lowered** the score, because it
+removes the fine detail of scratching, so it is switched off.
+
+## 6. Labels, folds and model input
+
+`preprocessing/step4_labels.py` and `step5_shaping.py`.
+
+- **Labels:** `gesture_id` (18 classes, the main target), `score_id` (the 9 classes Kaggle scores: 8 BFRBs +
+  "non-target"), `is_target` (BFRB or not), and a per-row `phase` (0 moving, 1 pausing, 2 gesture). Labels
+  are training targets only, never model inputs.
+- **Folds:** 5 folds, split **by person**, so nobody is in train and validation at the same time. The test
+  set has new people, so this is the only honest way to validate. Every fold contains all 18 gestures.
+- **Tree models:** one row per recording with 795 features. Each feature is summarised by mean, std, min and
+  max, plus mean, std and last value over the **last 25%**, where the gesture happens.
+- **Neural networks:** fixed length **128 rows**, which keeps 95% of recordings whole. Longer recordings keep
+  their **last** 128 rows, shorter ones are padded at the start, and a mask marks the real rows. Features are
+  normalised with a scaler fitted only on the training folds.
+- **Augmentation** (`augmentation.py`, training only): random crop, speed change, small rotations, noise, and
+  **switching off temperature and distance 50% of the time**, so models learn to cope with the motion-only
+  half of the test set.
+
+## 7. Proof that it helps
+
+Each step was tested with the same LightGBM model and the same 5 person-based folds. "Motion only" blanks
+temperature and distance, like half of the test set.
+
+| Pipeline | All sensors | Motion only |
+|---|---|---|
+| Raw data, missing values set to 0 | 0.750 | 0.663 |
+| + cleaning and temperature/distance summaries | 0.764 | 0.670 |
+| + statistics from the end of the recording | 0.790 | 0.707 |
+| + upside-down fix | 0.798 | 0.710 |
+| + left-hand mirroring | 0.807 | 0.709 |
+| + gravity removal | 0.807 | 0.722 |
+| + all other features | 0.807 | 0.730 |
+| **Final (without smoothing)** | **0.815** | **0.740** |
+
+**In total: +0.065 with all sensors and +0.078 with motion only.** Removing a single step from the full pipeline:
+
+| Removed | Score drop | Folds where it hurts |
+|---|---|---|
+| distance regions | −0.013 | 5 of 5 |
+| `-1` as "far" (back to "touching") | −0.011 | 5 of 5 |
+| left-hand mirroring | −0.010 | 5 of 5 |
+| upside-down fix | −0.006 | 4 of 5 |
+
+Quaternion sign fixing and gravity removal made no difference for trees once the other rotation features were
+present. They are physically correct and may still help neural networks.
+
+## 8. Output files
+
+Everything is in `data/processed/`. All files list the recordings in the **same order**.
+
+| File | For | Contents |
+|---|---|---|
+| `sequences.csv` | all models | one row per recording: labels, person, `fold`, sensor flags, row position in `features.npz` |
+| `tree_full.parquet` | tree models | 8,151 × 795 features, all sensors |
+| `tree_imu.parquet` | tree models | the same with temperature/distance blanked (motion-only training and validation) |
+| `features.npz` | neural networks | `features` (574,945 rows × 117) and `phase` (per row) |
+| `scalers/` | neural networks | normalisation per fold (`fold0-4.json`) and for the final model (`all.json`) |
+| `canonical/` | augmentation | the cleaned, position-corrected sensor signals |
+| `folds.csv`, `meta.json` | reference | person → fold; feature names and settings |
+
+`features.npz` and `canonical/` are too big for git. Download `processed_large_files.zip` from the
+repository's **Releases** page and unzip it in the repository folder.
+
+## 9. Using it
 
 ```python
 import pandas as pd
-import lightgbm as lgb
-from preprocessing.constants import GESTURES
-from preprocessing.step4_labels import competition_score
-
 seqs = pd.read_csv('data/processed/sequences.csv')
 X_full = pd.read_parquet('data/processed/tree_full.parquet').drop(columns='sequence_id')
 X_imu = pd.read_parquet('data/processed/tree_imu.parquet').drop(columns='sequence_id')
 y, fold = seqs['gesture_id'], seqs['fold']
-
-k = 0
-train, valid = fold != k, fold == k
-model = lgb.LGBMClassifier(verbose=-1)
-model.fit(pd.concat([X_full[train], X_imu[train]]), pd.concat([y[train], y[train]]))
-
-for name, X in [('all sensors', X_full), ('IMU-only', X_imu)]:
-    pred = model.predict(X[valid])
-    score, binary_f1, macro_f1 = competition_score(
-        [GESTURES[i] for i in y[valid]], [GESTURES[i] for i in pred])
-    print(f'fold {k} {name}: {score:.3f}')
+# train on fold != k (X_full and X_imu stacked), validate on fold == k, score both
 ```
 
-Trees handle `NaN` themselves, so no scaling is needed. Our reference LightGBM scores about **0.815 (all
-sensors)** and **0.740 (IMU-only)** averaged over the 5 folds. That's the baseline to beat.
+```python
+from preprocessing.step4_labels import competition_score
+score, binary_f1, macro_f1 = competition_score(true_gesture_names, predicted_gesture_names)
+```
 
-### Neural network input for one recording
+**Neural networks**, one recording `i`:
 
 ```python
-import json
-import numpy as np
-import pandas as pd
+import json, numpy as np, pandas as pd
 from preprocessing.dataset import sequence_slices
 from preprocessing.step5_shaping import Scaler, fixed_length
 
-seqs = pd.read_csv('data/processed/sequences.csv')
 meta = json.load(open('data/processed/meta.json'))
-z = np.load('data/processed/features.npz')
-features, phase = z['features'], z['phase']
-slices = sequence_slices(seqs)                                   # row range of each recording
-scaler = Scaler.load('data/processed/scalers/fold0.json')        # use the scaler of the fold you validate on
-L = meta['fixed_length']                                         # 128
-
-i = 0                                                            # recording number (row in sequences.csv)
-rows = pd.DataFrame(features[slices[i]], columns=meta['feature_columns'])
-x, mask = fixed_length(scaler.transform(rows), L)                # x: (128, 117), mask: 1 = real row, 0 = padding
-p, _ = fixed_length(phase[slices[i]], L)                         # per-row phase target (optional)
-label = seqs.loc[i, 'gesture_id']
+features = np.load('data/processed/features.npz')['features']
+rows = pd.DataFrame(features[sequence_slices(seqs)[i]], columns=meta['feature_columns'])
+scaler = Scaler.load('data/processed/scalers/fold0.json')        # scaler of the fold you validate on
+x, mask = fixed_length(scaler.transform(rows), 128)              # (128, 117) input + mask
 ```
 
-- `scaler.transform` normalises each feature and turns `NaN` into 0.
-- `fixed_length` keeps the **last** 128 rows (the gesture is at the end) and pads short recordings at the start.
-- Use `scalers/fold{k}.json` when validating on fold `k`, and `scalers/all.json` for the final model trained on everything.
-
-### Augmentation (neural networks, training only)
+**Augmentation** (training only, a new variant each call):
 
 ```python
-import numpy as np
 from preprocessing.dataset import CanonicalStore
 from preprocessing.augmentation import augment
 from preprocessing.pipeline import featurize
 
-store = CanonicalStore('data/processed/canonical')               # cleaned signals, same order as sequences.csv
-rng = np.random.default_rng()
-
-clean = store.get(i)                                             # recording i
-feats, tof_images = featurize(augment(clean, rng))               # random variant -> (rows, 117) features
-x, mask = fixed_length(scaler.transform(feats), L)
+store = CanonicalStore('data/processed/canonical')
+feats, tof_images = featurize(augment(store.get(i), np.random.default_rng()))
 ```
 
-`augment()` randomly crops, speeds up/slows down, rotates and adds noise, and **blanks temperature/distance
-50% of the time** (section 5). Call it again each epoch for new variants. Never augment validation data.
-`tof_images` gives `(rows, 5, 8, 8)` distance images if you want a CNN on the ToF sensors.
-
-### Kaggle submission
-
-On Kaggle, upload the `preprocessing/` folder as a Kaggle Dataset and add it to your notebook. Kaggle
-calls `predict()` once per recording. `preprocess()` produces exactly the same features as the training
-files (this is checked automatically, section 8):
+**On Kaggle**, upload the `preprocessing/` folder as a Kaggle Dataset. Inside `predict()`, one call gives
+exactly the training features (checked automatically, section 10):
 
 ```python
-import sys
-sys.path.append('/kaggle/input/<your-dataset-name>')            # folder that contains preprocessing/
-
-import pandas as pd
-import polars as pl
-from preprocessing.constants import GESTURES
 from preprocessing.pipeline import preprocess
 from preprocessing.step5_shaping import tree_summary
 
-def predict(sequence: pl.DataFrame, demographics: pl.DataFrame) -> str:
-    out = preprocess(sequence, demographics)                     # cleaning + orientation + features
-    # tree model:
-    row = pd.DataFrame([tree_summary(out.features)])[tree_columns]   # tree_columns = X_full.columns from training
-    return GESTURES[int(model.predict(row)[0])]
-    # neural network instead:
-    # x, mask = fixed_length(scaler.transform(out.features), 128)
+out = preprocess(sequence, demographics)                         # clean + position fix + 117 features
+tree_row = tree_summary(out.features)                            # for tree models
+x, mask = fixed_length(scaler.transform(out.features), 128)      # for neural networks
 ```
 
-## 7. The 117 features (per time step)
-
-| Group | Columns |
-|---|---|
-| Acceleration | `acc_x/y/z`, `acc_mag` |
-| Acceleration without gravity | `linear_acc_x/y/z`, `linear_acc_mag`, `linear_acc_vertical`, `linear_acc_horizontal` |
-| Wrist tilt | `gravity_dir_x/y/z` |
-| Rotation | `rot_w/x/y/z`, `rot6d_1..6` |
-| Movement | `jerk_x/y/z`, `jerk_mag`, `acc_cos_sim`, `angular_vel_x/y/z`, `angular_distance` |
-| Temperature | `thm_1..5`, `thm_mean`, `thm_1..5_diff` |
-| Distance (5 sensors) | `tof_k_mean/max/std/valid_frac/mean_diff` and 3×3 regions `tof_k_r00..r22` |
-| Flags | `rot_missing`, `thm_missing`, `tof_missing` |
-| Position | `time_frac` (0 = start, 1 = end of recording) |
-
-The tree files summarise each feature over the recording: `__mean`, `__std`, `__min`, `__max`,
-`__tail_mean`, `__tail_std` (last 25%) and `__last`, plus the flags and `length`.
-
-What the cleaning already did for you: rows ordered, gaps filled, rotation sign flips fixed, distance
-`-1` ("nothing there") turned into "far", the 2 subjects who wore the device upside down rotated back, and
-left-handed subjects mirrored so they look like right-handers. **You don't need to clean anything.**
-
-## 8. Code layout and rebuilding
+## 10. Code and rebuilding
 
 ```
-data/raw/                 Kaggle ZIP (not in git)
-data/processed/           the files above
-preprocessing/            the pipeline, in the order it runs
-  step1_cleaning.py         order rows, fill gaps, fix rotation, ToF -> proximity
-  step2_orientation.py      upside-down fix, left-hand mirroring
-  step3_features.py         the 117 features
-  step4_labels.py           labels and competition_score()
-  step5_shaping.py          fixed_length(), tree_summary(), Scaler, folds
-  pipeline.py               preprocess(): steps 1-3 for one recording (used on Kaggle)
-  augmentation.py           augment() for training
-  dataset.py                builds the training set, CanonicalStore, sequence_slices()
+preprocessing/               the pipeline, in the order it runs
+  step1_cleaning.py            section 3
+  step2_orientation.py         section 4
+  step3_features.py            section 5
+  step4_labels.py              labels and competition_score()
+  step5_shaping.py             tree summaries, fixed length, scaler, folds
+  pipeline.py                  preprocess(): steps 1-3 for one recording (used on Kaggle)
+  augmentation.py              training augmentations
+  dataset.py                   runs the pipeline over the whole training set
+  constants.py, data_loading.py, quaternion.py   helpers
 scripts/
-  01_build_dataset.py       builds data/processed/
-  02_parity_check.py        checks Kaggle preprocess() == training features
-  03_quality_checks.py      22 checks on the built data
-tests/                    32 unit tests
-run_pipeline.py           runs all of the above in order
+  01_build_dataset.py          builds data/processed/
+  02_parity_check.py           Kaggle preprocess() == training features
+  03_quality_checks.py         22 checks on the built data
+tests/test_preprocessing.py  32 unit tests
+run_pipeline.py              runs everything above
 ```
 
-To rebuild `data/processed/` from the raw data (about 6 minutes):
+Setup and rebuild:
 
 ```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+kaggle competitions download -c cmi-detect-behavior-with-sensor-data -p data/raw
 .\.venv\Scripts\python.exe run_pipeline.py
 ```
 
-It runs the tests, builds the data, and checks it: Kaggle parity, plus 22 quality checks such as no
-subject in two folds, all 18 gestures in every fold, and no label leakage. It only replaces
-`data/processed/` if **every** check passes. You only need this if the preprocessing code changes.
+`run_pipeline.py` runs the tests, builds the data, checks that the Kaggle path gives identical features, and
+runs 22 quality checks: no person in two folds, all gestures in every fold, no label leakage, valid scaling,
+and more. It replaces `data/processed/` **only if every check passes**, in about 5 minutes.
