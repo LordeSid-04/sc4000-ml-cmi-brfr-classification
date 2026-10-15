@@ -12,10 +12,10 @@ import numpy as np
 import pandas as pd
 
 from .augmentation import drop_sensors
-from .cleaning import CleanSequence, DataError
-from .labels import row_phase, sequence_labels
+from .step1_cleaning import CleanSequence, DataError
+from .step4_labels import row_phase, sequence_labels
 from .pipeline import PipelineConfig, canonical, featurize
-from .shaping import tree_summary
+from .step5_shaping import tree_summary
 
 
 def process_training_set(train, demographics, config=PipelineConfig(), keep_canonical=False,

@@ -1,9 +1,9 @@
 """Build docs/Preprocessing_Report.pdf from the saved results and figures.
 
-    python scripts/07_build_report_pdf.py
+    python scripts/08_build_report_pdf.py
 
 Every number is read from outputs/ (ablation, verification, quality checks)
-and processed/meta.json, so the report always matches the code that ran.
+and data/processed/meta.json, so the report always matches the code that ran.
 """
 import json
 from datetime import date
@@ -26,7 +26,7 @@ abl = json.loads(Path('outputs/ablation/trees.json').read_text())
 phys = json.loads(Path('outputs/verification/physics.json').read_text())
 quality = json.loads(Path('outputs/verification/quality.json').read_text())
 parity = json.loads(Path('outputs/verification/parity.json').read_text())
-meta = json.loads(Path('processed/meta.json').read_text())
+meta = json.loads(Path('data/processed/meta.json').read_text())
 
 # Fonts with full Unicode coverage (±, →, ↔, −) from matplotlib's bundled DejaVu.
 font_dir = Path(matplotlib.get_data_path()) / 'fonts' / 'ttf'
@@ -162,7 +162,7 @@ B('<b>Only sensor columns and demographics are available at test time.</b> Train
 
 # ---------------------------------------------------------------- 2 data facts
 P('2. What the data actually looks like (verified, not assumed)', 'h1')
-P('Before writing any correction we measured the data (script <font name="Mono">01_verify_physics.py</font>). Key facts:')
+P('Before writing any correction we measured the data (script <font name="Mono">02_verify_physics.py</font>). Key facts:')
 table([
     ['Question', 'Answer on the real data', 'Used for'],
     ['Size', f"{b['rows']:,} rows, {b['sequences']:,} recordings, {b['subjects']} people, {b['gestures']} gestures", 'folds, report'],
@@ -315,7 +315,7 @@ table([
 P('The earlier work (kept in <font name="Mono">legacy/</font>) contributed the strict input validation, the sequence-local design and the original test suite, all of which carried over.')
 
 P('9. What the modelling team receives', 'h1')
-B('<font name="Mono">processed/</font>: per-row features, per-recording tree features (all sensors and IMU-only), labels, the shared fold file, per-fold scalers, and cleaned signals for on-the-fly augmentation.')
+B('<font name="Mono">data/processed/</font>: per-row features, per-recording tree features (all sensors and IMU-only), labels, the shared fold file, per-fold scalers, and cleaned signals for on-the-fly augmentation.')
 B('<font name="Mono">preprocess(sequence, demographics)</font>: call it inside the Kaggle <font name="Mono">predict()</font>; it accepts the polars frames Kaggle sends and returns the same features as training.')
 B('<font name="Mono">preprocessing/augmentation.py</font>: crop, time-stretch, wrist/heading rotation, magnitude scaling, jitter, sensor dropout and mixup, applied to raw signals so physics features stay consistent.')
 

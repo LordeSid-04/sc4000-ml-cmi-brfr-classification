@@ -11,7 +11,7 @@ a rotation. ToF / thermopile sensors that trade places are permuted and ToF
 images are flipped to match.
 
 The exact axis, sensor permutation and image flip are NOT taken on faith from
-write-ups; scripts/01_verify_physics.py chooses them by matching left-handed (and
+write-ups; scripts/02_verify_physics.py chooses them by matching left-handed (and
 upside-down) subjects against right-handed ones on the real data. The values
 below are what that script selected.
 """

@@ -27,43 +27,51 @@ trains on. The same `preprocess()` function runs in training and inside the Kagg
 
 ## 1. Repository layout
 
+Everything follows the order the data flows: **raw data → cleaning → orientation → features → labels →
+shaping → checks → dataset**.
+
 ```
-eda/
-  01_explore_data.py          answers the six EDA questions (section 3), saves figures
-preprocessing/                the pipeline, one job per file
-  constants.py                  column names, gesture lists, sensor constants
-  data_loading.py               reads the Kaggle ZIP or extracted CSVs
-  quaternion.py                 rotation maths (rotate, conjugate, 6D, angular velocity)
-  cleaning.py                   order rows, fill gaps, quaternion continuity, ToF -> proximity
-  orientation.py                fix upside-down wearers, mirror left-handers (all sensors)
-  features.py                   gravity removal, jerk, angular velocity, ToF/THM summaries
-  labels.py                     gesture / 9-class / binary / phase / orientation labels, metric
-  shaping.py                    fixed length + mask, tree summaries, scalers, subject folds
-  augmentation.py               training-only augmentations
-  pipeline.py                   preprocess(sequence, demographics): the single entry point
+run_pipeline.py               ONE command: tests -> build -> checks -> publish (section 11)
+
+data/
+  raw/                          Kaggle competition ZIP (not in git)
+  processed/                    the built dataset for the modellers (section 10)
+
+preprocessing/                the pipeline, numbered in the order it runs
+  step1_cleaning.py             order rows, fill gaps, quaternion continuity, ToF -> proximity
+  step2_orientation.py          fix upside-down wearers, mirror left-handers (all sensors)
+  step3_features.py             gravity removal, jerk, angular velocity, ToF/THM summaries
+  step4_labels.py               gesture / 9-class / binary / phase labels, competition metric
+  step5_shaping.py              fixed length + mask, tree summaries, scalers, subject folds
+  pipeline.py                   preprocess(sequence, demographics): steps 1-3 for one recording
   dataset.py                    runs the pipeline over the whole training set
+  augmentation.py               training-only augmentations
   ablation.py                   the ablation variants A-H and leave-one-out
-scripts/                      run in this order
-  01_verify_physics.py          tests every physical assumption on the real data
-  02_build_dataset.py           builds processed/
-  03_parity_check.py            proves the Kaggle path gives identical output to training
-  04_ablation_study.py          measures what each preprocessing step is worth
-  05_report_figures.py          draws the result figures into docs/figures/results/
-  06_quality_checks.py          22 checks on the finished processed/ folder
-  07_build_report_pdf.py        builds docs/Preprocessing_Report.pdf
+  constants.py, data_loading.py, quaternion.py   shared helpers
+
+scripts/                      numbered in the order they run
+  01_explore_data.py            EDA: answers the six data questions (section 3)
+  02_verify_physics.py          tests every physical assumption on the real data
+  03_build_dataset.py           builds data/processed/
+  04_parity_check.py            proves the Kaggle path gives identical output to training
+  05_quality_checks.py          22 checks on the built dataset
+  06_ablation_study.py          measures what each preprocessing step is worth (~1.5 h)
+  07_report_figures.py          draws the result figures into docs/figures/results/
+  08_build_report_pdf.py        builds docs/Preprocessing_Report.pdf
   tools/make_synthetic_data.py  fake data with known answers, used by the tests
+
 tests/
   test_preprocessing.py         33 tests for the pipeline
   test_legacy_cleaning.py       11 tests for the original cleaning in legacy/
-legacy/                       the first cleaning version (kept for credit and comparison)
+
 docs/
   Preprocessing_Report.pdf      full write-up with figures
   CMI_Team_Guide_Preprocessing.pdf  the team plan the pipeline follows
   figures/eda/                  EDA figures (section 3)
   figures/results/              ablation and verification figures (section 8)
-processed/                    built dataset (small files in git, large arrays in the Release)
-data/                         competition ZIP (not in git)
-outputs/                      logs, ablation caches, JSON results (not in git, rebuilt by scripts)
+
+legacy/                       the first cleaning version (kept for credit and comparison)
+outputs/                      logs, JSON results, release zip (not in git, rebuilt by the run)
 ```
 
 ## 2. Setup and data
@@ -79,20 +87,21 @@ experimental free-threaded build, which cannot install numpy.
 **Raw data** is not in the repository (Kaggle's rules do not allow redistributing it). Download it once:
 
 ```powershell
-kaggle competitions download -c cmi-detect-behavior-with-sensor-data -p data
+kaggle competitions download -c cmi-detect-behavior-with-sensor-data -p data/raw
 ```
 
 or download the ZIP from the competition page and put it at
-`data/cmi-detect-behavior-with-sensor-data.zip`. Do not extract it; the code reads the ZIP directly.
+`data/raw/cmi-detect-behavior-with-sensor-data.zip`. Do not extract it; the code reads the ZIP directly.
 
-**Built data** (`processed/`): the small files (`sequences.csv`, `folds.csv`, `meta.json`, `scalers/`,
-`tree_full.parquet`, `tree_imu.parquet`) are committed. The large arrays (`features.npz`, `canonical/`,
-about 750 MB) are too big for git. Download `processed_full.zip` from the repository's **Releases** page
-and unzip it in the repository root, or rebuild it with `scripts/02_build_dataset.py` (about 4 minutes).
+**Built data** (`data/processed/`): the small files (`sequences.csv`, `folds.csv`, `meta.json`, `scalers/`,
+`tree_full.parquet`, `tree_imu.parquet`, about 62 MB) are committed. The large arrays (`features.npz`,
+`canonical/`, about 720 MB) are too big for git. Either download `processed_large_files.zip` from the
+repository's **Releases** page and unzip it in the repository root, or rebuild everything with
+`python run_pipeline.py` (about 8 minutes).
 
 ## 3. Exploratory data analysis
 
-`eda/01_explore_data.py` answers six questions on the full training set. Figures are in
+`scripts/01_explore_data.py` answers six questions on the full training set. Figures are in
 `docs/figures/eda/` and every number is saved to `outputs/eda/summary.json`.
 
 ### 3.1 Size and structure
@@ -207,16 +216,16 @@ It uses no labels, no other subjects and no fitted statistics, so it is safe ins
 
 | # | Step | File | What it does and why |
 |---|---|---|---|
-| 1 | Order | `cleaning.py` | Sort rows by `sequence_counter`. |
-| 2 | Fill gaps | `cleaning.py` | Any NaN inside a recording is interpolated linearly over the counter, with the nearest value at the edges. A sensor that is absent for the whole recording stays NaN and gets a `*_missing` flag. The model-specific step decides how to fill it, so we never invent a fake reading. |
-| 3 | Quaternion continuity | `cleaning.py` | `q` and `-q` are the same rotation, but a sign switch looks like a sudden full twist to a model. Every quaternion is flipped to stay continuous with the previous one. **13,644 flips were found in 4,730 of 8,151 recordings (58%).** |
-| 4 | ToF → proximity | `cleaning.py` | Distance becomes proximity in [0, 1] (1 = touching, 0 = far), and `-1` ("nothing in range") becomes 0 = far. The old version turned `-1` into distance 0, which means *touching*, the exact opposite. Fixing this is worth **+0.011 F1, better in 5/5 folds**. |
-| 5 | Upside-down fix | `orientation.py` | Exactly two subjects (**SUBJ_019262, SUBJ_045235**) wore the device rotated 180°. A 180° turn about z fixes them (agreement with everyone else goes from −0.20 to 0.62). Sensors 2↔4 and 3↔5 swap and ToF images rotate 180°. Fixing them beats deleting them. |
-| 6 | Left-hand mirroring | `orientation.py` | Mirror the x axis for left-handers, on **all** sensors: acceleration, quaternion, thermopile/ToF sensor positions (3↔5 swap), and ToF images flipped left–right (sensors 1, 2, 4) or up–down (3, 5, which are mounted sideways). |
-| 7 | Features | `features.py` | Section 5. No smoothing: the ablation showed it removes useful detail (−0.008 / −0.010 F1). |
+| 1 | Order | `step1_cleaning.py` | Sort rows by `sequence_counter`. |
+| 2 | Fill gaps | `step1_cleaning.py` | Any NaN inside a recording is interpolated linearly over the counter, with the nearest value at the edges. A sensor that is absent for the whole recording stays NaN and gets a `*_missing` flag. The model-specific step decides how to fill it, so we never invent a fake reading. |
+| 3 | Quaternion continuity | `step1_cleaning.py` | `q` and `-q` are the same rotation, but a sign switch looks like a sudden full twist to a model. Every quaternion is flipped to stay continuous with the previous one. **13,644 flips were found in 4,730 of 8,151 recordings (58%).** |
+| 4 | ToF → proximity | `step1_cleaning.py` | Distance becomes proximity in [0, 1] (1 = touching, 0 = far), and `-1` ("nothing in range") becomes 0 = far. The old version turned `-1` into distance 0, which means *touching*, the exact opposite. Fixing this is worth **+0.011 F1, better in 5/5 folds**. |
+| 5 | Upside-down fix | `step2_orientation.py` | Exactly two subjects (**SUBJ_019262, SUBJ_045235**) wore the device rotated 180°. A 180° turn about z fixes them (agreement with everyone else goes from −0.20 to 0.62). Sensors 2↔4 and 3↔5 swap and ToF images rotate 180°. Fixing them beats deleting them. |
+| 6 | Left-hand mirroring | `step2_orientation.py` | Mirror the x axis for left-handers, on **all** sensors: acceleration, quaternion, thermopile/ToF sensor positions (3↔5 swap), and ToF images flipped left–right (sensors 1, 2, 4) or up–down (3, 5, which are mounted sideways). |
+| 7 | Features | `step3_features.py` | Section 5. No smoothing: the ablation showed it removes useful detail (−0.008 / −0.010 F1). |
 
 Every physical assumption (quaternion convention, which axis to mirror, which subjects are upside down)
-was **measured on the real data** by `scripts/01_verify_physics.py`, not taken from write-ups. For example,
+was **measured on the real data** by `scripts/02_verify_physics.py`, not taken from write-ups. For example,
 rotating acceleration into the world frame with the quaternion puts 9.63 m/s² on the vertical axis, which
 confirms the convention. Results: `outputs/verification/physics.json`.
 
@@ -254,7 +263,7 @@ For **CNNs on the ToF images**, `out.tof_images` gives the `(rows, 5, 8, 8)` pro
 
 ## 6. Labels, folds and fixed length
 
-Built in `labels.py` and `shaping.py`. They are training **targets** only, never model inputs (the test set
+Built in `step4_labels.py` and `step5_shaping.py`. They are training **targets** only, never model inputs (the test set
 does not have those columns).
 
 | Label | Values | Use |
@@ -273,7 +282,7 @@ validation, because the test set has unseen people. Every fold contains all 18 g
 **Fixed length** (neural nets): L = 128. Shorter recordings are padded at the **start** with a mask, and
 longer ones keep their **last** 128 rows.
 
-**Scaling:** mean/std per feature, fitted on the training part of each fold only (`processed/scalers/fold0-4.json`),
+**Scaling:** mean/std per feature, fitted on the training part of each fold only (`data/processed/scalers/fold0-4.json`),
 plus `all.json` fitted on everything for the final submission model.
 
 ## 7. Augmentation (for training)
@@ -346,7 +355,7 @@ orientation fixes (`fig_subject_gravity.png`), and the length distribution (`fig
 - **Synthetic data:** a planted mirror and upside-down transform are recovered exactly by the verification script.
 - **Kaggle parity:** 377 real recordings sent through the Kaggle-style path (polars, shuffled rows, no label
   columns) give features identical to training (max difference 0.0), and both real test sequences run.
-- **Dataset quality:** 22/22 checks on `processed/` pass. These include: no subject in two folds, every fold
+- **Dataset quality:** 22/22 checks on `data/processed/` pass. These include: no subject in two folds, every fold
   has all 18 gestures, NaN only where a sensor was dead for the whole recording, no label leakage, and valid
   scaling (`outputs/verification/quality.json`).
 
@@ -354,14 +363,14 @@ orientation fixes (`fig_subject_gravity.png`), and the length distribution (`fig
 
 | File | Shape | Contents |
 |---|---|---|
-| `processed/sequences.csv` | 8,151 rows | one row per recording: subject, handedness, length, sensor flags, all labels, `fold`, `start_row` into `features.npz` |
-| `processed/folds.csv` | | subject → fold |
-| `processed/tree_full.parquet` | 8,151 × 796 | tree features, all sensors |
-| `processed/tree_imu.parquet` | 8,151 × 796 | tree features with THM/ToF blanked (IMU-only training/validation) |
-| `processed/features.npz` *(Release)* | `features` 574,945 × 117, `phase` 574,945 | per-row features for neural nets; slice a recording with `start_row` and `rows` |
-| `processed/canonical/` *(Release)* | | cleaned, orientation-corrected raw signals for on-the-fly augmentation |
-| `processed/scalers/` | | per-fold and all-data mean/std |
-| `processed/meta.json` | | feature column names and build settings |
+| `data/processed/sequences.csv` | 8,151 rows | one row per recording: subject, handedness, length, sensor flags, all labels, `fold`, `start_row` into `features.npz` |
+| `data/processed/folds.csv` | | subject → fold |
+| `data/processed/tree_full.parquet` | 8,151 × 796 | tree features, all sensors |
+| `data/processed/tree_imu.parquet` | 8,151 × 796 | tree features with THM/ToF blanked (IMU-only training/validation) |
+| `data/processed/features.npz` *(Release)* | `features` 574,945 × 117, `phase` 574,945 | per-row features for neural nets; slice a recording with `start_row` and `rows` |
+| `data/processed/canonical/` *(Release)* | | cleaned, orientation-corrected raw signals for on-the-fly augmentation |
+| `data/processed/scalers/` | | per-fold and all-data mean/std |
+| `data/processed/meta.json` | | feature column names and build settings |
 
 **At prediction time on Kaggle:**
 
@@ -376,16 +385,30 @@ out.clean         # cleaned signals (for augmentation in training)
 
 ## 11. Rebuilding everything
 
+One command runs the whole pipeline and only publishes data that passed every check:
+
 ```powershell
-.\.venv\Scripts\python.exe -m pytest tests                # 44 tests, ~20 s
-.\.venv\Scripts\python.exe eda\01_explore_data.py         # EDA figures, ~3 min
-.\.venv\Scripts\python.exe scripts\01_verify_physics.py   # ~8 min
-.\.venv\Scripts\python.exe scripts\02_build_dataset.py    # ~4 min
-.\.venv\Scripts\python.exe scripts\03_parity_check.py     # ~2 min
-.\.venv\Scripts\python.exe scripts\04_ablation_study.py   # ~1.5 h
-.\.venv\Scripts\python.exe scripts\06_quality_checks.py   # ~1 min
-.\.venv\Scripts\python.exe scripts\05_report_figures.py   # ~3 min
-.\.venv\Scripts\python.exe scripts\07_build_report_pdf.py
+.\.venv\Scripts\python.exe run_pipeline.py          # ~8 min
+.\.venv\Scripts\python.exe run_pipeline.py --full   # + EDA and physics verification, ~16 min
+```
+
+| Stage | What it proves |
+|---|---|
+| 1. Unit tests (44) | every step works on synthetic data with known answers |
+| 2. Build | cleaning → orientation → features → labels for all 8,151 recordings, into `data/processed_candidate/` |
+| 3. Parity check | the Kaggle `predict()` path gives exactly the training features |
+| 4. Quality checks (22) | the built dataset is consistent (folds, NaN pattern, scaling, no leakage, ...) |
+| 5. Publish | **only if 1–4 pass:** the candidate replaces `data/processed/` and the large files are zipped to `outputs/release/processed_large_files.zip` |
+
+If any stage fails, the run stops, prints which one, and leaves `data/processed/` untouched. The result
+of every stage is saved to `outputs/run_summary.json`.
+
+The slow research scripts run separately:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\06_ablation_study.py   # ~1.5 h, section 8
+.\.venv\Scripts\python.exe scripts\07_report_figures.py   # figures for section 8
+.\.venv\Scripts\python.exe scripts\08_build_report_pdf.py # docs/Preprocessing_Report.pdf
 ```
 
 ## 12. History and credit

@@ -7,13 +7,13 @@ import pandas as pd
 
 from preprocessing import quaternion as quat
 from preprocessing.augmentation import AugmentConfig, augment, time_stretch, wrist_rotation, yaw_rotation
-from preprocessing.cleaning import DataError, clean_sequence
+from preprocessing.step1_cleaning import DataError, clean_sequence
 from preprocessing.constants import ACC, GRAVITY, ROT, THM, TOF
-from preprocessing.features import FeatureConfig, gravity_in_device_frame, sequence_features
-from preprocessing.labels import competition_score, initial_state, phase_of, sequence_labels
-from preprocessing.orientation import MIRROR, UPSIDE_DOWN, apply_frame_change, canonicalize
+from preprocessing.step3_features import FeatureConfig, gravity_in_device_frame, sequence_features
+from preprocessing.step4_labels import competition_score, initial_state, phase_of, sequence_labels
+from preprocessing.step2_orientation import MIRROR, UPSIDE_DOWN, apply_frame_change, canonicalize
 from preprocessing.pipeline import baseline_features, preprocess
-from preprocessing.shaping import Scaler, fixed_length, make_folds, tree_summary
+from preprocessing.step5_shaping import Scaler, fixed_length, make_folds, tree_summary
 
 UP = np.array([0.0, 0.0, GRAVITY])
 
@@ -34,14 +34,13 @@ def recording(n=40, seed=0, motion=None):
     q = random_quaternions(n, seed)
     gravity_device = quat.rotate(quat.conjugate(q), np.broadcast_to(UP, (n, 3)))
     motion = np.zeros((n, 3)) if motion is None else motion
-    frame = pd.DataFrame(gravity_device + motion, columns=ACC)
-    frame[ROT] = q
-    frame[THM] = 30 + rng.normal(0, 0.5, (n, 5))
-    frame[TOF] = rng.integers(0, 255, (n, 320)).astype(float)
-    frame['sequence_id'] = 'SEQ_TEST'
-    frame['sequence_counter'] = np.arange(n)
-    frame['subject'] = 'SUBJ_TEST'
-    return frame.copy()
+    return pd.concat([
+        pd.DataFrame(gravity_device + motion, columns=ACC),
+        pd.DataFrame(q, columns=ROT),
+        pd.DataFrame(30 + rng.normal(0, 0.5, (n, 5)), columns=THM),
+        pd.DataFrame(rng.integers(0, 255, (n, 320)).astype(float), columns=TOF),
+        pd.DataFrame({'sequence_id': 'SEQ_TEST', 'sequence_counter': np.arange(n), 'subject': 'SUBJ_TEST'}),
+    ], axis=1)
 
 
 def gravity_consistency_error(seq):

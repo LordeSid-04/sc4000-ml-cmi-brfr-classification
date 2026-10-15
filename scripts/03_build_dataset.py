@@ -1,6 +1,6 @@
 """Build the processed training set that every model on the team uses.
 
-    python scripts/02_build_dataset.py [--data PATH] [--out processed]
+    python scripts/03_build_dataset.py [--data PATH] [--out data/processed]
 
 Outputs (in --out):
   sequences.csv        one row per recording: ids, labels, fold, flags, row slice
@@ -26,16 +26,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from preprocessing.constants import GESTURES, SCORE_CLASSES  # noqa: E402
 from preprocessing.dataset import process_training_set, save_canonical  # noqa: E402
 from preprocessing.data_loading import load_train  # noqa: E402
-from preprocessing.labels import PHASES  # noqa: E402
-from preprocessing.orientation import MIRROR, UPSIDE_DOWN, UPSIDE_DOWN_SUBJECTS  # noqa: E402
+from preprocessing.step4_labels import PHASES  # noqa: E402
+from preprocessing.step2_orientation import MIRROR, UPSIDE_DOWN, UPSIDE_DOWN_SUBJECTS  # noqa: E402
 from preprocessing.pipeline import PipelineConfig  # noqa: E402
-from preprocessing.shaping import Scaler, make_folds  # noqa: E402
+from preprocessing.step5_shaping import Scaler, make_folds  # noqa: E402
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data')
-    parser.add_argument('--out', default='processed')
+    parser.add_argument('--out', default='data/processed')
     parser.add_argument('--length', type=int, default=0, help='fixed length L (0 = 95th percentile, rounded up to 8)')
     parser.add_argument('--seed', type=int, default=42)
     args = parser.parse_args()

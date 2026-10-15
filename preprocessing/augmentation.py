@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from . import quaternion as quat
-from .features import gravity_in_device_frame
+from .step3_features import gravity_in_device_frame
 
 
 @dataclass(frozen=True)

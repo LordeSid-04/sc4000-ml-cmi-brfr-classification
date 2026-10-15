@@ -1,9 +1,10 @@
-"""Quality checks on the finished processed/ folder (what the modellers receive).
+"""Quality checks on the finished data/processed/ folder (what the modellers receive).
 
-    python scripts/06_quality_checks.py
+    python scripts/05_quality_checks.py [--processed data/processed]
 
 Every check prints PASS/FAIL; results go to outputs/verification/quality.json.
 """
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -14,16 +15,18 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from preprocessing.constants import GESTURES  # noqa: E402
 from preprocessing.dataset import CanonicalStore, sequence_slices  # noqa: E402
-from preprocessing.shaping import Scaler  # noqa: E402
+from preprocessing.step5_shaping import Scaler  # noqa: E402
 
-ROOT = Path('processed')
 ROT_COLUMNS = ['rot_w', 'angular_vel_x', 'angular_distance', 'rot6d_1']
 
 
 def main():
-    meta = json.loads((ROOT / 'meta.json').read_text(encoding='utf-8'))
-    seqs = pd.read_csv(ROOT / 'sequences.csv')
-    z = np.load(ROOT / 'features.npz')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--processed', default='data/processed')
+    root = Path(parser.parse_args().processed)
+    meta = json.loads((root / 'meta.json').read_text(encoding='utf-8'))
+    seqs = pd.read_csv(root / 'sequences.csv')
+    z = np.load(root / 'features.npz')
     feats, phase = z['features'], z['phase']
     cols = meta['feature_columns']
     frame = pd.DataFrame(feats, columns=cols)
@@ -78,7 +81,7 @@ def main():
 
     # Scaler fitted on folds != k: training rows should be ~N(0, 1), flags untouched.
     k = 0
-    scaler = Scaler.load(ROOT / 'scalers' / f'fold{k}.json')
+    scaler = Scaler.load(root / 'scalers' / f'fold{k}.json')
     train_rows = np.flatnonzero(seqs['fold'].to_numpy()[row_seq] != k)
     sample = np.random.default_rng(0).choice(train_rows, 50000, replace=False)
     x = scaler.transform(frame.iloc[sample])
@@ -87,7 +90,7 @@ def main():
     check('fold scaler gives mean ~0 on training rows', np.abs(x[:, other].mean(axis=0)).max() < 0.1)
     check('scaled values finite (NaN -> 0)', np.isfinite(x).all())
 
-    store = CanonicalStore(ROOT / 'canonical')
+    store = CanonicalStore(root / 'canonical')
     check('canonical store aligned with sequences.csv', store.sequence_ids == seqs['sequence_id'].tolist())
     s = store.get(0)
     check('canonical quaternions are unit length', np.allclose(np.linalg.norm(s.rot, axis=1), 1, atol=1e-3))

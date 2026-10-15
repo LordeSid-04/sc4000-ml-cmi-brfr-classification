@@ -5,8 +5,8 @@ from pathlib import Path
 import pandas as pd
 
 DEFAULT_LOCATIONS = [
-    Path('data/cmi-detect-behavior-with-sensor-data.zip'),
-    Path('data'),
+    Path('data/raw/cmi-detect-behavior-with-sensor-data.zip'),
+    Path('data/raw'),
     Path('/kaggle/input/cmi-detect-behavior-with-sensor-data'),
 ]
 
@@ -24,7 +24,7 @@ def find_data(path=None):
                 return zips[0]
     raise FileNotFoundError(
         'Competition data not found. Put cmi-detect-behavior-with-sensor-data.zip '
-        '(or the extracted train.csv) in data/, or pass --data.')
+        '(or the extracted train.csv) in data/raw/, or pass --data.')
 
 
 def read_table(source, name):

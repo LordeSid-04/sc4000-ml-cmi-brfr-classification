@@ -1,9 +1,9 @@
 """Figures for the preprocessing report, drawn from the saved results.
 
-    python scripts/05_report_figures.py
+    python scripts/07_report_figures.py
 
 Reads outputs/ablation/trees.json, outputs/verification/physics.json,
-processed/sequences.csv and the raw training data; writes PNGs to
+data/processed/sequences.csv and the raw training data; writes PNGs to
 docs/figures/results/.
 """
 import json
@@ -19,11 +19,11 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from preprocessing import quaternion as quat  # noqa: E402
-from preprocessing.cleaning import clean_sequence  # noqa: E402
+from preprocessing.step1_cleaning import clean_sequence  # noqa: E402
 from preprocessing.constants import GRAVITY, ROT  # noqa: E402
 from preprocessing.data_loading import load_train  # noqa: E402
-from preprocessing.features import gravity_in_device_frame  # noqa: E402
-from preprocessing.orientation import UPSIDE_DOWN_SUBJECTS  # noqa: E402
+from preprocessing.step3_features import gravity_in_device_frame  # noqa: E402
+from preprocessing.step2_orientation import UPSIDE_DOWN_SUBJECTS  # noqa: E402
 
 OUT = Path('docs/figures/results')
 # Reference palette, first slots (validated as a set): blue, orange, aqua.
@@ -168,7 +168,7 @@ def main():
     results = json.loads(Path('outputs/ablation/trees.json').read_text())
     ablation_steps(results)
     leave_one_out(results)
-    lengths(pd.read_csv('processed/sequences.csv'))
+    lengths(pd.read_csv('data/processed/sequences.csv'))
     train, demo = load_train()
     train = train.sort_values(['sequence_id', 'sequence_counter'], kind='stable')
     sign_flip(train)

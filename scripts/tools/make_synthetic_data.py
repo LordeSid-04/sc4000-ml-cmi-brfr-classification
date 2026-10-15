@@ -2,7 +2,7 @@
 
 Left-handed subjects are created by applying a known mirror (x axis, sensors
 3<->5, images flipped left-right) and two subjects are rotated 180 degrees about
-z, so scripts/01_verify_physics.py can be checked to recover exactly that.
+z, so scripts/02_verify_physics.py can be checked to recover exactly that.
 
     python scripts/tools/make_synthetic_data.py OUT.zip [--subjects 24]
 """
@@ -17,9 +17,9 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from preprocessing import quaternion as quat  # noqa: E402
-from preprocessing.cleaning import CleanSequence  # noqa: E402
+from preprocessing.step1_cleaning import CleanSequence  # noqa: E402
 from preprocessing.constants import ACC, GESTURES, GRAVITY, ROT, THM, TOF, TOF_MAX  # noqa: E402
-from preprocessing.orientation import UPSIDE_DOWN_SUBJECTS, FrameChange, apply_frame_change  # noqa: E402
+from preprocessing.step2_orientation import UPSIDE_DOWN_SUBJECTS, FrameChange, apply_frame_change  # noqa: E402
 
 TRUE_MIRROR = FrameChange('mirror', 0, (0, 1, 4, 3, 2), 'fliplr')
 TRUE_FLIP = FrameChange('rotation', 2, (0, 1, 2, 3, 4), 'none')

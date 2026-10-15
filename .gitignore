@@ -1,19 +1,20 @@
 # Raw competition data: download from Kaggle (see README), never commit.
-data/
+data/raw/
 
 # Built dataset: the small files are committed, the large arrays
 # (canonical/, features.npz) are published as a GitHub Release asset.
-processed/*
-!processed/sequences.csv
-!processed/folds.csv
-!processed/meta.json
-!processed/scalers/
-!processed/tree_full.parquet
-!processed/tree_imu.parquet
+data/processed/*
+!data/processed/sequences.csv
+!data/processed/folds.csv
+!data/processed/meta.json
+!data/processed/scalers/
+!data/processed/tree_full.parquet
+!data/processed/tree_imu.parquet
+data/processed_candidate/
+data/processed_old/
 
-# Generated results (rebuild with the scripts) and release zips.
+# Generated results: rebuilt by run_pipeline.py and the scripts.
 outputs/
-release/
 *.zip
 *.npz
 *.npy

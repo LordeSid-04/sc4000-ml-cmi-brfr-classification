@@ -1,6 +1,6 @@
 """Ablation study with a LightGBM baseline (guide section 9).
 
-    python scripts/04_ablation_study.py [--data PATH] [--rows A B C ...] [--workers 5]
+    python scripts/06_ablation_study.py [--data PATH] [--rows A B C ...] [--workers 5]
 
 Same model, same 5 subject folds and same seed for every row. Each row is
 scored on all-sensor validation and on IMU-only validation (thermopile + ToF
@@ -21,8 +21,8 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from preprocessing.ablation import ALL, cross_validate_lgbm, tree_rows_for_sequence  # noqa: E402
 from preprocessing.data_loading import load_train  # noqa: E402
-from preprocessing.labels import GESTURE_INDEX  # noqa: E402
-from preprocessing.orientation import UPSIDE_DOWN_SUBJECTS  # noqa: E402
+from preprocessing.step4_labels import GESTURE_INDEX  # noqa: E402
+from preprocessing.step2_orientation import UPSIDE_DOWN_SUBJECTS  # noqa: E402
 
 OUT = Path('outputs/ablation')
 
@@ -75,7 +75,7 @@ def main():
     parser.add_argument('--data')
     parser.add_argument('--rows', nargs='*', default=list(ALL))
     parser.add_argument('--workers', type=int, default=5)
-    parser.add_argument('--folds', default='processed/folds.csv')
+    parser.add_argument('--folds', default='data/processed/folds.csv')
     parser.add_argument('--seed', type=int, default=42)
     args = parser.parse_args()
     (OUT / 'features').mkdir(parents=True, exist_ok=True)
@@ -92,7 +92,7 @@ def main():
         folds = pd.read_csv(args.folds)
         labels = pd.read_csv(Path(args.folds).parent / 'sequences.csv')[['sequence_id', 'gesture', 'subject']]
     else:
-        from preprocessing.shaping import make_folds
+        from preprocessing.step5_shaping import make_folds
         if train is None:
             train, demo = load_train(args.data)
         labels = train.groupby('sequence_id', sort=True).agg(gesture=('gesture', 'first'), subject=('subject', 'first')).reset_index()

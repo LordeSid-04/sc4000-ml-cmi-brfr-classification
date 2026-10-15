@@ -4,7 +4,7 @@ Answers the open questions of guide section 11 with numbers, and chooses the
 left-hand mirror and upside-down corrections by matching subjects against the
 right-handed population instead of trusting write-ups.
 
-    python scripts/01_verify_physics.py [--data PATH]
+    python scripts/02_verify_physics.py [--data PATH]
 
 Writes outputs/verification/physics.json and figures next to it.
 """
@@ -19,12 +19,12 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from preprocessing import quaternion as quat  # noqa: E402
-from preprocessing.cleaning import clean_sequence  # noqa: E402
+from preprocessing.step1_cleaning import clean_sequence  # noqa: E402
 from preprocessing.constants import ACC, GRAVITY, ROT, THM, TOF  # noqa: E402
-from preprocessing.features import gravity_in_device_frame  # noqa: E402
+from preprocessing.step3_features import gravity_in_device_frame  # noqa: E402
 from preprocessing.data_loading import load_train  # noqa: E402
-from preprocessing.labels import phase_of  # noqa: E402
-from preprocessing.orientation import IMAGE_OPS, UPSIDE_DOWN_SUBJECTS, FrameChange, image_op  # noqa: E402
+from preprocessing.step4_labels import phase_of  # noqa: E402
+from preprocessing.step2_orientation import IMAGE_OPS, UPSIDE_DOWN_SUBJECTS, FrameChange, image_op  # noqa: E402
 
 OUT = Path('outputs/verification')
 

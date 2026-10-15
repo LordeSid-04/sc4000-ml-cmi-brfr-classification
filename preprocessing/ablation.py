@@ -8,12 +8,12 @@ from dataclasses import replace
 import numpy as np
 
 from .augmentation import drop_sensors
-from .cleaning import DataError, clean_sequence
+from .step1_cleaning import DataError, clean_sequence
 from .constants import THM, TOF
-from .features import FeatureConfig
-from .orientation import canonicalize
+from .step3_features import FeatureConfig
+from .step2_orientation import canonicalize
 from .pipeline import PipelineConfig, baseline_features, featurize
-from .shaping import tree_summary
+from .step5_shaping import tree_summary
 
 _PLAIN = FeatureConfig(gravity=False, engineered=False)
 _B = PipelineConfig(fix_upside_down=False, mirror_left=False, features=_PLAIN)
@@ -92,7 +92,7 @@ def cross_validate_lgbm(x_full, x_imu, y, folds, seed=42, exclude_train=None):
     validation versions. Returns per-fold scores and out-of-fold probabilities."""
     import lightgbm as lgb
     from .constants import GESTURES
-    from .labels import competition_score
+    from .step4_labels import competition_score
     n_classes = len(GESTURES)
     oof_full = np.zeros((len(y), n_classes))
     oof_imu = np.zeros((len(y), n_classes))

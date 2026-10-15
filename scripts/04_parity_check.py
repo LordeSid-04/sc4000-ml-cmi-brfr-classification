@@ -3,10 +3,10 @@ features the models were trained on.
 
 For a sample of training sequences, this rebuilds features the way Kaggle
 would call us (one polars sequence without train-only columns + a one-row
-polars demographics frame) and compares them with processed/features.npz.
+polars demographics frame) and compares them with data/processed/features.npz.
 It also runs the real test.csv examples end to end.
 
-    python scripts/03_parity_check.py [--data PATH] [--n 300]
+    python scripts/04_parity_check.py [--data PATH] [--n 300]
 """
 import argparse
 import json
@@ -19,7 +19,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from preprocessing.constants import TRAIN_ONLY  # noqa: E402
 from preprocessing.dataset import sequence_slices  # noqa: E402
-from preprocessing.features import FeatureConfig  # noqa: E402
+from preprocessing.step3_features import FeatureConfig  # noqa: E402
 from preprocessing.data_loading import load_test, load_train  # noqa: E402
 from preprocessing.pipeline import PipelineConfig, preprocess  # noqa: E402
 
@@ -27,7 +27,7 @@ from preprocessing.pipeline import PipelineConfig, preprocess  # noqa: E402
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data')
-    parser.add_argument('--processed', default='processed')
+    parser.add_argument('--processed', default='data/processed')
     parser.add_argument('--n', type=int, default=300)
     parser.add_argument('--seed', type=int, default=0)
     args = parser.parse_args()

@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from .cleaning import clean_sequence
+from .step1_cleaning import clean_sequence
 from .constants import ACC, ROT, THM, TOF
-from .features import FeatureConfig, sequence_features, tof_images
-from .orientation import canonicalize
+from .step3_features import FeatureConfig, sequence_features, tof_images
+from .step2_orientation import canonicalize
 
 
 @dataclass(frozen=True)

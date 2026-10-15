@@ -1,6 +1,6 @@
 """Exploratory data analysis: the six questions that decide the preprocessing.
 
-    python eda/01_explore_data.py
+    python scripts/01_explore_data.py
 
 1. Size and structure   - sequences, rows, subjects, sequence lengths
 2. Labels               - sequences per gesture, target vs non-target, rare targets
