@@ -1,21 +1,29 @@
-# Raw and generated datasets stay local.
+# Raw competition data: download from Kaggle (see README), never commit.
 data/
-processed_data/
-processed_data_*/
-verification_output/
-audit_results/
-preview/
-inspect_cleaned_data.py
-.local_checks/
+
+# Built dataset: the small files are committed, the large arrays
+# (canonical/, features.npz) are published as a GitHub Release asset.
+processed/*
+!processed/sequences.csv
+!processed/folds.csv
+!processed/meta.json
+!processed/scalers/
+!processed/tree_full.parquet
+!processed/tree_imu.parquet
+
+# Generated results (rebuild with the scripts) and release zips.
+outputs/
+release/
 *.zip
 *.npz
 *.npy
-*.parquet
-*.csv
+
+# Python / tooling
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+.ipynb_checkpoints/
 .env
 .env.*
 !.env.example

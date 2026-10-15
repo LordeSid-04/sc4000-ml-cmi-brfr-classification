@@ -1,2 +1,11 @@
 numpy>=1.26,<3
 pandas>=2.2,<4
+scipy>=1.11
+scikit-learn>=1.4
+pyarrow>=14
+lightgbm>=4.0
+matplotlib>=3.10
+polars>=1.0
+pytest>=8
+reportlab>=4.0
+pypdfium2>=4.0
