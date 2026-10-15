@@ -9,7 +9,7 @@ what is wrong with it, how we clean it, which features we build and why, and how
 [3. Cleaning](#3-cleaning) · [4. Putting everyone in the same position](#4-putting-everyone-in-the-same-position) ·
 [5. Features](#5-features) · [6. Labels, folds and model input](#6-labels-folds-and-model-input) ·
 [7. Proof that it helps](#7-proof-that-it-helps) · [8. Output files](#8-output-files) ·
-[9. Using it](#9-using-it) · [10. Code and rebuilding](#10-code-and-rebuilding)
+[9. Using it: two ways](#9-using-it-two-ways) · [10. Code and rebuilding](#10-code-and-rebuilding)
 
 ---
 
@@ -54,7 +54,7 @@ people, so it can run unchanged inside Kaggle's `predict()`.
 | # | Step | What it does | Why |
 |---|---|---|---|
 | 1 | **Order rows** | sort by `sequence_counter`, drop duplicates | a safety step. The training data is already ordered, but Kaggle input is not guaranteed to be |
-| 2 | **Fill gaps** | a short gap inside a recording is filled by linear interpolation. A sensor that is missing for the **whole** recording stays empty, with a flag (`rot_missing`, `thm_missing`, `tof_missing`) | never invent a reading. The model is told the sensor is off instead of being fed fake numbers |
+| 2 | **Fill gaps** | a gap inside a recording is filled by linear interpolation. A sensor that is missing for the **whole** recording stays empty, with a flag (`rot_missing`, `thm_missing`, `tof_missing`) | never invent a reading. The model is told the sensor is off instead of being fed fake numbers |
 | 3 | **Fix quaternion sign flips** | flip `q` to `−q` whenever it jumps away from the previous row | removes the fake "full twist" jumps (13,644 of them) |
 | 4 | **Distance → proximity** | `proximity = 1 − distance / 255`, so 1 = touching and 0 = far. `-1` ("nothing there") becomes **0 = far** | keeps the physical meaning: "nothing in range" really is the farthest possible. An earlier version mapped `-1` to "touching", the exact opposite |
 
@@ -80,24 +80,27 @@ set would not be detected (this harms no one else).
 
 ## 5. Features
 
-`preprocessing/step3_features.py` turns each cleaned row into **117 features**. A feature that cannot exist,
-for example temperature when the sensor is off, is `NaN`.
+`preprocessing/step3_features.py` turns **every time step** (one row, about 0.1 s) of a recording into
+**117 features**. A feature that cannot exist, for example temperature when the sensor is off, is `NaN`.
+Section 9 shows the two ways models use them: per time step (neural networks) or summarised per recording
+(tree models).
 
-| Group | Features | What it captures, and why it helps |
-|---|---|---|
-| **Raw acceleration** | `acc_x/y/z`, `acc_mag` | the base movement signal |
-| **Gravity removed** | `linear_acc_x/y/z`, `linear_acc_mag` | the hand's own movement without gravity, so the same gesture looks the same sitting or lying. Gravity is computed from the rotation, or estimated from the slow part of the signal when rotation is missing |
-| **Wrist tilt** | `gravity_dir_x/y/z` | which way the wrist points. A hand at the head is tilted differently from a hand at the knee |
-| **Up/down vs sideways** | `linear_acc_vertical`, `linear_acc_horizontal` | movement direction in the room, independent of how the watch sits |
-| **Rotation** | `rot_w/x/y/z`, `rot6d_1..6` | wrist orientation. The 6D version has no `q`/`−q` ambiguity and is easier for networks to learn |
-| **Jerk** | `jerk_x/y/z`, `jerk_mag` | how fast acceleration changes. Scratching and pulling are short, jerky movements |
-| **Direction change** | `acc_cos_sim` | how much the movement direction changes between rows (back-and-forth motion) |
-| **Turning speed** | `angular_vel_x/y/z`, `angular_distance` | how fast the wrist rotates, for example twisting while pulling hair |
-| **Temperature** | `thm_1..5`, `thm_mean`, `thm_1..5_diff` | skin is warm. Shows when the hand is next to the body and when it arrives there |
-| **Distance per sensor** | `tof_k_mean/max/std/valid_frac/mean_diff` | how close something is, the closest point, and how it changes |
-| **Distance regions** | `tof_k_r00..r22` (3×3 grid per sensor) | **where** in the image the object is (centre vs edge). The most valuable single step (section 7) |
-| **Sensor flags** | `rot_missing`, `thm_missing`, `tof_missing` | tell the model which sensors were available |
-| **Position** | `time_frac` | 0 = start, 1 = end of the recording |
+| Group | # | Features | What it captures, and why it helps |
+|---|---|---|---|
+| **Raw acceleration** | 4 | `acc_x/y/z`, `acc_mag` | the base movement signal |
+| **Gravity removed** | 4 | `linear_acc_x/y/z`, `linear_acc_mag` | the hand's own movement without gravity, so the same gesture looks the same sitting or lying. Gravity is computed from the rotation, or estimated from the slow part of the signal when rotation is missing |
+| **Wrist tilt** | 3 | `gravity_dir_x/y/z` | which way the wrist points. A hand at the head is tilted differently from a hand at the knee |
+| **Up/down vs sideways** | 2 | `linear_acc_vertical`, `linear_acc_horizontal` | movement direction in the room, independent of how the watch sits |
+| **Rotation** | 10 | `rot_w/x/y/z`, `rot6d_1..6` | wrist orientation. The 6D version has no `q`/`−q` ambiguity and is easier for networks to learn |
+| **Jerk** | 4 | `jerk_x/y/z`, `jerk_mag` | how fast acceleration changes. Scratching and pulling are short, jerky movements |
+| **Direction change** | 1 | `acc_cos_sim` | how much the movement direction changes between rows (back-and-forth motion) |
+| **Turning speed** | 4 | `angular_vel_x/y/z`, `angular_distance` | how fast the wrist rotates, for example twisting while pulling hair |
+| **Temperature** | 11 | `thm_1..5`, `thm_mean`, `thm_1..5_diff` | skin is warm. Shows when the hand is next to the body and when it arrives there |
+| **Distance per sensor** | 25 | `tof_k_mean/max/std/valid_frac/mean_diff` | how close something is, the closest point, and how it changes |
+| **Distance regions** | 45 | `tof_k_r00..r22` (3×3 grid per sensor) | **where** in the image the object is (centre vs edge). The most valuable single step (section 7) |
+| **Sensor flags** | 3 | `rot_missing`, `thm_missing`, `tof_missing` | tell the model which sensors were available |
+| **Position** | 1 | `time_frac` | 0 = start, 1 = end of the recording |
+| | **117** | | |
 
 We tested light smoothing before computing jerk and turning speed. It **lowered** the score, because it
 removes the fine detail of scratching, so it is switched off.
@@ -111,10 +114,9 @@ removes the fine detail of scratching, so it is switched off.
   are training targets only, never model inputs.
 - **Folds:** 5 folds, split **by person**, so nobody is in train and validation at the same time. The test
   set has new people, so this is the only honest way to validate. Every fold contains all 18 gestures.
-- **Tree models:** one row per recording with 795 features. Each feature is summarised by mean, std, min and
-  max, plus mean, std and last value over the **last 25%**, where the gesture happens.
-- **Neural networks:** fixed length **128 rows**, which keeps 95% of recordings whole. Longer recordings keep
-  their **last** 128 rows, shorter ones are padded at the start, and a mask marks the real rows. Features are
+- **Tree models** get one row per recording (795 features, section 9).
+- **Neural networks** get a fixed length of **128 rows**, which keeps 95% of recordings whole. Longer recordings
+  keep their **last** 128 rows, shorter ones are padded at the start, and a mask marks the real rows. Features are
   normalised with a scaler fitted only on the training folds.
 - **Augmentation** (`augmentation.py`, training only): random crop, speed change, small rotations, noise, and
   **switching off temperature and distance 50% of the time**, so models learn to cope with the motion-only
@@ -165,57 +167,108 @@ Everything is in `data/processed/`. All files list the recordings in the **same 
 `features.npz` and `canonical/` are too big for git. Download `processed_large_files.zip` from the
 repository's **Releases** page and unzip it in the repository folder.
 
-## 9. Using it
+## 9. Using it: two ways
 
-```python
-import pandas as pd
-seqs = pd.read_csv('data/processed/sequences.csv')
-X_full = pd.read_parquet('data/processed/tree_full.parquet').drop(columns='sequence_id')
-X_imu = pd.read_parquet('data/processed/tree_imu.parquet').drop(columns='sequence_id')
-y, fold = seqs['gesture_id'], seqs['fold']
-# train on fold != k (X_full and X_imu stacked), validate on fold == k, score both
-```
+The same 117 features come in two shapes. Use either one, or train both and average their predictions
+(worth testing: the two model types tend to make different mistakes).
+
+| | **A. Tree models** (LightGBM, XGBoost, CatBoost) | **B. Neural networks** (1D-CNN, GRU/LSTM, Transformer) |
+|---|---|---|
+| Shape | **1 row per recording × 795 features** | **128 time steps × 117 features** per recording |
+| Files | `tree_full.parquet` + `tree_imu.parquet` | `features.npz` + `scalers/` (+ `canonical/` for augmentation) |
+| How the 795 / 128 come about | each of the 113 sensor features is summarised 7 ways (mean, std, min, max, mean and std of the last 25%, last value) = 791, + 3 flags + length | the last 128 time steps, padded at the start if shorter, with a mask |
+| Missing sensors (`NaN`) | handled by the tree itself | the scaler turns them into 0; the flags tell the model |
+| Motion-only test half | train on `tree_full` and `tree_imu` stacked | `augment()` switches temperature/distance off 50% of the time |
+| Effort | minutes to train; the example below scores about **0.81 / 0.74** (all sensors / motion only, mean of 5 folds) | slower, but can learn the timing of a gesture |
+
+Both use the same labels and folds from `sequences.csv`. Always train on `fold != k` and validate on
+`fold == k`. Score with `competition_score()`:
 
 ```python
 from preprocessing.step4_labels import competition_score
 score, binary_f1, macro_f1 = competition_score(true_gesture_names, predicted_gesture_names)
 ```
 
-**Neural networks**, one recording `i`:
+### A. Tree models
 
 ```python
-import json, numpy as np, pandas as pd
+import pandas as pd
+import lightgbm as lgb
+from preprocessing.constants import GESTURES
+from preprocessing.step4_labels import competition_score
+
+seqs = pd.read_csv('data/processed/sequences.csv')
+X_full = pd.read_parquet('data/processed/tree_full.parquet').drop(columns='sequence_id')
+X_imu = pd.read_parquet('data/processed/tree_imu.parquet').drop(columns='sequence_id')
+y, fold = seqs['gesture_id'], seqs['fold']
+
+params = dict(learning_rate=0.05, n_estimators=500, num_leaves=31, min_child_samples=20,
+              colsample_bytree=0.3, subsample=0.8, subsample_freq=1, reg_lambda=1.0,
+              random_state=42, verbose=-1)              # our reference settings (section 7)
+
+for k in range(5):
+    train, valid = fold != k, fold == k
+    model = lgb.LGBMClassifier(**params)
+    model.fit(pd.concat([X_full[train], X_imu[train]]), pd.concat([y[train], y[train]]))
+    for name, X in [('all sensors', X_full), ('motion only', X_imu)]:
+        pred = model.predict(X[valid])
+        score, _, _ = competition_score([GESTURES[g] for g in y[valid]], [GESTURES[g] for g in pred])
+        print(f'fold {k} {name}: {score:.3f}')
+```
+
+### B. Neural networks
+
+```python
+import json
+import numpy as np
+import pandas as pd
 from preprocessing.dataset import sequence_slices
 from preprocessing.step5_shaping import Scaler, fixed_length
 
+seqs = pd.read_csv('data/processed/sequences.csv')
 meta = json.load(open('data/processed/meta.json'))
 features = np.load('data/processed/features.npz')['features']
-rows = pd.DataFrame(features[sequence_slices(seqs)[i]], columns=meta['feature_columns'])
-scaler = Scaler.load('data/processed/scalers/fold0.json')        # scaler of the fold you validate on
-x, mask = fixed_length(scaler.transform(rows), 128)              # (128, 117) input + mask
+slices = sequence_slices(seqs)                                   # where each recording's rows are
+
+k = 0                                                            # fold to validate on
+scaler = Scaler.load(f'data/processed/scalers/fold{k}.json')     # fitted on the other folds only
+
+def model_input(i):
+    """Recording i (row i of sequences.csv) -> (128, 117) input and (128,) mask."""
+    rows = pd.DataFrame(features[slices[i]], columns=meta['feature_columns'])
+    return fixed_length(scaler.transform(rows), 128)
+
+x, mask = model_input(0)
+label = seqs.loc[0, 'gesture_id']
 ```
 
-**Augmentation** (training only, a new variant each call):
+**Augmentation** (training only, a new random variant each call):
 
 ```python
 from preprocessing.dataset import CanonicalStore
 from preprocessing.augmentation import augment
 from preprocessing.pipeline import featurize
 
-store = CanonicalStore('data/processed/canonical')
-feats, tof_images = featurize(augment(store.get(i), np.random.default_rng()))
+store = CanonicalStore('data/processed/canonical')               # same order as sequences.csv
+feats, tof_images = featurize(augment(store.get(0), np.random.default_rng()))
+x, mask = fixed_length(scaler.transform(feats), 128)
 ```
 
-**On Kaggle**, upload the `preprocessing/` folder as a Kaggle Dataset. Inside `predict()`, one call gives
-exactly the training features (checked automatically, section 10):
+`tof_images` gives the distance sensors as `(rows, 5, 8, 8)` images, if you want a CNN on them.
+
+### On Kaggle
+
+Upload the `preprocessing/` folder as a Kaggle Dataset. Inside `predict()`, one call gives exactly the
+training features (checked automatically, section 10). Then use whichever shape your model needs:
 
 ```python
 from preprocessing.pipeline import preprocess
 from preprocessing.step5_shaping import tree_summary
 
 out = preprocess(sequence, demographics)                         # clean + position fix + 117 features
-tree_row = tree_summary(out.features)                            # for tree models
-x, mask = fixed_length(scaler.transform(out.features), 128)      # for neural networks
+tree_row = tree_summary(out.features)                            # A: 795 features for tree models
+scaler = Scaler.load('data/processed/scalers/all.json')          # B: final model uses the all-data scaler
+x, mask = fixed_length(scaler.transform(out.features), 128)      #    (128, 117) for neural networks
 ```
 
 ## 10. Code and rebuilding
