@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 
 from .step1_cleaning import clean_sequence
-from .constants import ACC, ROT, THM, TOF
 from .step3_features import FeatureConfig, sequence_features, tof_images
 from .step2_orientation import canonicalize
 
@@ -77,10 +76,3 @@ def preprocess(sequence, demographics=None, config=PipelineConfig(), strict=Fals
     features, images = featurize(seq, config)
     return Processed(seq.sequence_id, features, images, seq)
 
-
-def baseline_features(sequence):
-    """Ablation row A: raw sensor columns in counter order, NaN -> 0, nothing else."""
-    sequence = to_pandas(sequence).sort_values('sequence_counter')
-    cols = ACC + ROT + THM + TOF
-    raw = sequence.reindex(columns=cols).apply(pd.to_numeric, errors='coerce')
-    return raw.fillna(0.0).reset_index(drop=True).astype(np.float32)

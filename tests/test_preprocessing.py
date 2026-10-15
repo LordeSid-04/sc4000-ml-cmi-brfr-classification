@@ -12,7 +12,7 @@ from preprocessing.constants import ACC, GRAVITY, ROT, THM, TOF
 from preprocessing.step3_features import FeatureConfig, gravity_in_device_frame, sequence_features
 from preprocessing.step4_labels import competition_score, initial_state, phase_of, sequence_labels
 from preprocessing.step2_orientation import MIRROR, UPSIDE_DOWN, apply_frame_change, canonicalize
-from preprocessing.pipeline import baseline_features, preprocess
+from preprocessing.pipeline import preprocess
 from preprocessing.step5_shaping import Scaler, fixed_length, make_folds, tree_summary
 
 UP = np.array([0.0, 0.0, GRAVITY])
@@ -238,9 +238,6 @@ class FeatureTests(unittest.TestCase):
         frame['orientation'] = 'Seated Straight'
         b = preprocess(frame).features
         pd.testing.assert_frame_equal(a, b)
-
-    def test_baseline_shape(self):
-        self.assertEqual(baseline_features(recording(12)).shape, (12, 332))
 
 
 class ShapingTests(unittest.TestCase):

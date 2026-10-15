@@ -10,10 +10,9 @@ mirror (the whole scene is mirrored, keeping gravity on world z) and W = I for
 a rotation. ToF / thermopile sensors that trade places are permuted and ToF
 images are flipped to match.
 
-The exact axis, sensor permutation and image flip are NOT taken on faith from
-write-ups; scripts/02_verify_physics.py chooses them by matching left-handed (and
-upside-down) subjects against right-handed ones on the real data. The values
-below are what that script selected.
+The exact axis, sensor permutation and image flip were chosen on the real
+training data by matching left-handed (and upside-down) subjects against
+right-handed ones (see the research-and-report branch).
 """
 from dataclasses import dataclass
 
@@ -41,7 +40,7 @@ class FrameChange:
         return m
 
 
-# Selected on the training data (outputs/verification/physics.json):
+# Selected on the training data:
 # - left hand: mirror x (agreement with right-handers 0.38 -> 0.64, equal to their
 #   own 0.64), swap sensors 3<->5, images flipped left-right on sensors 1/2/4 and
 #   up-down on the sideways-mounted sensors 3/5.

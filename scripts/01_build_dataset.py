@@ -1,6 +1,6 @@
 """Build the processed training set that every model on the team uses.
 
-    python scripts/03_build_dataset.py [--data PATH] [--out data/processed]
+    python scripts/01_build_dataset.py [--data PATH] [--out data/processed]
 
 Outputs (in --out):
   sequences.csv        one row per recording: ids, labels, fold, flags, row slice

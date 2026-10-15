@@ -6,7 +6,7 @@ would call us (one polars sequence without train-only columns + a one-row
 polars demographics frame) and compares them with data/processed/features.npz.
 It also runs the real test.csv examples end to end.
 
-    python scripts/04_parity_check.py [--data PATH] [--n 300]
+    python scripts/02_parity_check.py [--data PATH] [--n 300]
 """
 import argparse
 import json

@@ -1,6 +1,6 @@
 """Quality checks on the finished data/processed/ folder (what the modellers receive).
 
-    python scripts/05_quality_checks.py [--processed data/processed]
+    python scripts/03_quality_checks.py [--processed data/processed]
 
 Every check prints PASS/FAIL; results go to outputs/verification/quality.json.
 """

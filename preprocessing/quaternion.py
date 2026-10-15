@@ -1,6 +1,6 @@
 """Vectorised quaternion maths. Quaternions are (N, 4) arrays in (w, x, y, z) order.
 
-Convention (checked on the real data by scripts/02_verify_physics.py): the sensor
+Convention (checked on the real training data): the sensor
 quaternion rotates device-frame vectors into the world frame,
     v_world = q * v_device * conj(q),
 and in the world frame gravity lies on +z.

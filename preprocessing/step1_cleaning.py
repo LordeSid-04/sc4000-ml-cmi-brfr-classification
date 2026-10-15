@@ -119,7 +119,7 @@ def clean_sequence(sequence, strict=False, continuity=True, tof_no_object='far')
     problems: Kaggle gives us one sequence at a time and a crash would fail the
     whole submission.
 
-    continuity and tof_no_object exist for the ablation study only:
+    continuity and tof_no_object are switches for experiments; keep the defaults.
     tof_no_object='near' reproduces the earlier "-1 -> distance 0" choice.
     """
     issues = []

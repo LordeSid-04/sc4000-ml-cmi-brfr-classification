@@ -1,7 +1,6 @@
 """Run the whole preprocessing pipeline with one command.
 
-    python run_pipeline.py            # tests -> build -> checks -> publish (~8 min)
-    python run_pipeline.py --full     # also re-runs the EDA and the physics verification
+    python run_pipeline.py            # tests -> build -> checks -> publish (~6 min)
     python run_pipeline.py --data PATH
 
 Stages:
@@ -14,7 +13,6 @@ Stages:
                           and the large files are zipped for the GitHub Release
 
 If any stage fails, the run stops and data/processed/ is left untouched.
-The ablation study (scripts/06_ablation_study.py, ~1.5 h) is run separately.
 """
 import argparse
 import json
@@ -81,20 +79,16 @@ def package():
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--data', help='Kaggle ZIP or extracted folder (default: data/raw/)')
-    parser.add_argument('--full', action='store_true', help='also run the EDA and physics verification')
     args = parser.parse_args()
     data = ['--data', args.data] if args.data else []
     candidate = str(CANDIDATE.relative_to(ROOT))
 
     if CANDIDATE.exists():
         shutil.rmtree(CANDIDATE)
-    stages = [('unit tests', ['-m', 'pytest', '-q', 'tests'])]
-    if args.full:
-        stages += [('exploratory data analysis', ['scripts/01_explore_data.py']),
-                   ('physics verification', ['scripts/02_verify_physics.py', *data])]
-    stages += [('build dataset', ['scripts/03_build_dataset.py', '--out', candidate, *data]),
-               ('parity check', ['scripts/04_parity_check.py', '--processed', candidate, *data]),
-               ('quality checks', ['scripts/05_quality_checks.py', '--processed', candidate])]
+    stages = [('unit tests', ['-m', 'pytest', '-q', 'tests']),
+              ('build dataset', ['scripts/01_build_dataset.py', '--out', candidate, *data]),
+              ('parity check', ['scripts/02_parity_check.py', '--processed', candidate, *data]),
+              ('quality checks', ['scripts/03_quality_checks.py', '--processed', candidate])]
 
     results = []
     start = time.time()
