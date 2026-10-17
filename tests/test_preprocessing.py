@@ -163,6 +163,9 @@ class OrientationTests(unittest.TestCase):
         self.assertEqual(demographic_values(demo, 'ACTUAL'), ('ACTUAL', None))
         with self.assertRaises(ValueError):
             demographic_values(pd.concat([demo, demo]), None)
+        unlabelled = pd.DataFrame({'handedness': [0, 1]})
+        with self.assertRaises(ValueError):
+            demographic_values(unlabelled, 'ACTUAL')
 
     def test_frame_changes_keep_physics_consistent(self):
         seq = clean_sequence(recording())

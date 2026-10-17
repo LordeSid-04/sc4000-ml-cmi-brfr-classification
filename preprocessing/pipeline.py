@@ -49,8 +49,8 @@ def demographic_values(demographics, subject=None):
     demo = to_pandas(demographics)
     if subject is not None and 'subject' in demo:
         demo = demo[demo['subject'] == subject]
-    elif subject is None and len(demo) != 1:
-        raise ValueError('A subject or exactly one demographics row is required')
+    elif len(demo) != 1:
+        raise ValueError('A subject column or exactly one demographics row is required')
     if len(demo) == 0:
         return subject, None
     row = demo.iloc[0]
