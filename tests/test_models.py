@@ -4,8 +4,8 @@ import pandas as pd
 import pytest
 import torch
 
-from models.common import SID, blank, groups, prep, score_ids
-from models.registry import NETS
+from models.common import SID, blank, fit_scaler, groups, holm, prep, pvalue, score_ids
+from models.registry import NETS, TREES
 from preprocessing.constants import GESTURES
 from preprocessing.step4_labels import competition_score
 from preprocessing.step5_shaping import Scaler, fixed_length
@@ -61,3 +61,27 @@ def test_every_network_forward_shapes_and_padding(core, motion_only):
     m[0, :8] = 0
     logits, ph = net(z * m[..., None], m)
     assert logits.shape == (3, 18) and ph.shape == (3, 16, 3) and torch.isfinite(logits).all()
+
+
+def test_inner_split_scaler_equals_repo_scaler_on_training_rows():
+    rng = np.random.default_rng(2)
+    seqs = pd.DataFrame({'rows': [5, 7, 4], 'start_row': [0, 5, 12]})
+    feats = rng.normal(size=(16, len(COLS))).astype(np.float32)
+    feats[5:12, 6:9] = np.nan
+    mean, std = fit_scaler(feats, seqs, np.array([True, False, True]), COLS)
+    ref = Scaler().fit(pd.DataFrame(np.r_[feats[:5], feats[12:]], columns=COLS))
+    assert np.allclose(mean, ref.mean, atol=1e-5) and np.allclose(std, ref.std, atol=1e-5)
+
+
+def test_bootstrap_pvalue_and_holm():
+    assert pvalue(np.full(100, 0.01)) == 0 and pvalue(np.r_[np.full(50, 1.), np.full(50, -1.)]) == 1
+    assert np.allclose(holm([0.01, 0.04, 0.03]), [0.03, 0.06, 0.06])
+
+
+@pytest.mark.parametrize('model', list(TREES))
+def test_tree_builders_accept_tuned_settings(model):
+    kw = {'mlp': {'alpha': 0.01}, 'rf': {'min_samples_leaf': 3}}.get(model, {'n_estimators': 7})
+    m = TREES[model](1, 10, **kw)
+    params = m.get_params()
+    assert any(params.get(k) == v or params.get(f'{m.steps[-1][0]}__{k}' if hasattr(m, 'steps') else k) == v
+               for k, v in kw.items())

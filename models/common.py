@@ -1,5 +1,6 @@
 """Shared helpers: data shaping, GPU scaling, the competition metric, OOF files, subject bootstrap."""
 import json
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -45,6 +46,21 @@ def scaler(d, k, dev, cols):
     assert s['columns'] == cols
     return (torch.tensor(s['mean'], dtype=torch.float32, device=dev),
             torch.tensor(s['std'], dtype=torch.float32, device=dev))
+
+
+def fit_scaler(feats, seqs, train_mask, cols):
+    """Scaler fitted on the full-length rows of the training recordings only (same rule as Scaler.fit).
+    Used for inner tuning splits, which have no stored scaler."""
+    assert seqs['rows'].sum() == len(feats) and (seqs['start_row'].diff().fillna(0) >= 0).all()
+    v = feats[np.repeat(np.asarray(train_mask), seqs['rows'].to_numpy())]     # rows are stored in sequence order
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', RuntimeWarning)
+        mean, std = np.nan_to_num(np.nanmean(v, 0)), np.nan_to_num(np.nanstd(v, 0))
+    std = np.where(std > 1e-8, std, 1.0)
+    for i, c in enumerate(cols):
+        if c in ('rot_missing', 'thm_missing', 'tof_missing'):
+            mean[i], std[i] = 0.0, 1.0
+    return mean.astype(np.float32), std.astype(np.float32)
 
 
 def prep(x, ln, mean, std):
@@ -110,7 +126,22 @@ def get(name, fold):
     return load_oof(n, 'full', fold), load_oof(n, alt or 'imu', fold)
 
 
-# ---- uncertainty ------------------------------------------------------------------------------------
+# ---- uncertainty and multiple comparisons -----------------------------------------------------------
+def pvalue(d):
+    """Two-sided bootstrap p-value that a paired difference is zero."""
+    return float(min(1.0, 2 * min(np.mean(d <= 0), np.mean(d >= 0))))
+
+
+def holm(p):
+    """Holm-Bonferroni adjusted p-values (controls the family-wise error over several comparisons)."""
+    p = np.asarray(p, float)
+    order, m = np.argsort(p), len(p)
+    adj = np.maximum.accumulate([min(1.0, (m - i) * p[j]) for i, j in enumerate(order)])
+    out = np.empty(m)
+    out[order] = adj
+    return out
+
+
 def bootstrap(y, subject, preds, n=300, seed=0):
     """Subject-level bootstrap (people are the independent units). preds = {name: (pf, pi)}.
     All models are scored on the same resamples, so differences are paired."""

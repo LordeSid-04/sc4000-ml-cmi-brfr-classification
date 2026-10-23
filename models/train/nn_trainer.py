@@ -1,15 +1,17 @@
 """Training loop shared by every network (cnn, gru, transformer, cnn_gru). Each model's own file just calls cli(core).
 
-The whole dataset lives on the GPU (no data loader). Epoch count is fixed in advance and the EMA weights from the last
-epoch are reported, so nothing is ever chosen on the validation fold. Finished (seed, fold) runs are skipped, so a
+The whole dataset lives on the GPU (no data loader). The epoch count is fixed in advance and the EMA weights from the
+last epoch are reported, so nothing is ever chosen on a validation fold. Finished (seed, fold) runs are skipped, so a
 crashed or interrupted session resumes where it stopped.
 
   python -m models.train.cnn_gru --variant full            # all sensors (also saves 'blank': same model, sensors off)
   python -m models.train.cnn_gru --variant imu             # motion-only model
-  options: --folds 0 1  --seeds 0 1 2  --epochs 40  --phase 0 (no aux loss)  --aug 0 (no copies)  --save (keep weights)
+  options: --folds 0 1  --seeds 0 1 2  --params results/params/cnn_gru.json (tuned settings)  --save (keep weights)
+           --phase 0 (no aux loss)  --aug 0 (no copies)  --drop-sub _r0 (zero matching columns)  --shuffle-labels (sanity)
 """
 import argparse
 import copy
+import json
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +21,8 @@ import torch.nn.functional as F
 from models.common import blank, groups, load, oof_path, prep, save_oof, scaler, score, shape
 from models.registry import NETS
 
+HP = dict(lr=2e-3, epochs=40, bs=128, phase=0.3, drop=0.2, d=192)      # defaults; tuning overrides these
+
 
 def parse(core, argv=None):
     ap = argparse.ArgumentParser(description=f'train the {core} network')
@@ -27,79 +31,79 @@ def parse(core, argv=None):
     ap.add_argument('--data', default='data/processed')
     ap.add_argument('--folds', type=int, nargs='+', default=list(range(5)))
     ap.add_argument('--seeds', type=int, nargs='+', default=[0])
-    ap.add_argument('--epochs', type=int, default=40)
-    ap.add_argument('--bs', type=int, default=128)
-    ap.add_argument('--lr', type=float, default=2e-3)
-    ap.add_argument('--phase', type=float, default=0.3, help='weight of the auxiliary phase loss (0 = off)')
+    ap.add_argument('--params', help='JSON written by models.train.tune (overrides the defaults below)')
+    for k, v in HP.items():
+        ap.add_argument(f'--{k}', type=type(v), default=None, help=f'default {v}')
     ap.add_argument('--aug', type=int, default=1, help='use the pre-computed augmented copies if present')
     ap.add_argument('--drop-sub', nargs='*', default=[], help='zero columns whose name contains any of these')
+    ap.add_argument('--shuffle-labels', action='store_true', help='sanity check: train on permuted labels')
     ap.add_argument('--save', action='store_true', help='keep model weights (needed only for the deployed model)')
-    return ap.parse_args(argv)
+    a = ap.parse_args(argv)
+    a.hp = {**HP, **(json.load(open(a.params))['params'] if a.params else {}),
+            **{k: getattr(a, k) for k in HP if getattr(a, k) is not None}}
+    return a
 
 
-def train(core, a):
-    dev = 'cuda' if torch.cuda.is_available() else 'cpu'
-    amp = dev == 'cuda'
-    d, meta, seqs, feats, phase = load(a.data)
-    cols, L = meta['feature_columns'], meta['fixed_length']
-    imu, prox, flags = groups(cols)
-    used = [] if a.variant == 'imu' else prox
-    kinds = ['imu'] if a.variant == 'imu' else ['full', 'blank']
-    todo = [(s, k) for s in a.seeds for k in a.folds if not all(oof_path(a.name, kd, s, k).exists() for kd in kinds)]
-    if not todo:
-        print(f'{a.name} {a.variant}: all requested runs already done', flush=True)
-        return
-    keep = torch.tensor([0. if any(s in c for s in a.drop_sub) else 1. for c in cols], device=dev)
-
-    X, n, P = shape(feats, phase, seqs, L)
-    T = lambda v: torch.tensor(v, device=dev)
-    X32, N0, P0, Y, fold = T(X), T(n), T(P), T(seqs['gesture_id'].to_numpy()), T(seqs['fold'].to_numpy())
-    pool, plen, psrc = X32.half(), N0, torch.arange(len(seqs), device=dev)
-    if a.aug and (d / 'aug_x.npy').exists():
-        pool = torch.cat([pool, T(np.load(d / 'aug_x.npy'))])
-        plen = torch.cat([plen, T(np.load(d / 'aug_len.npy'))])
-        psrc = torch.cat([psrc, T(np.load(d / 'aug_src.npy'))])
-    isorig = torch.arange(len(pool), device=dev) < len(seqs)
-    print(f'{a.name} {a.variant} on {dev}: {len(seqs)} recordings, pool {len(pool)}, {len(todo)} runs', flush=True)
+class Data:
+    """Everything a training run needs, loaded once onto the device."""
+    def __init__(s, data='data/processed', aug=True, drop_sub=()):
+        s.dev = 'cuda' if torch.cuda.is_available() else 'cpu'
+        s.amp = s.dev == 'cuda'
+        s.d, meta, s.seqs, s.feats, phase = load(data)
+        s.cols, s.L = meta['feature_columns'], meta['fixed_length']
+        s.imu, s.prox, s.flags = groups(s.cols)
+        s.keep = torch.tensor([0. if any(t in c for t in drop_sub) else 1. for c in s.cols], device=s.dev)
+        X, n, P = shape(s.feats, phase, s.seqs, s.L)
+        T = lambda v: torch.tensor(v, device=s.dev)
+        s.X, s.n, s.P = T(X), T(n), T(P)
+        s.Y, s.fold = T(s.seqs['gesture_id'].to_numpy()), T(s.seqs['fold'].to_numpy())
+        s.pool, s.plen, s.src = s.X.half(), s.n, torch.arange(len(s.seqs), device=s.dev)
+        if aug and (s.d / 'aug_x.npy').exists():
+            s.pool = torch.cat([s.pool, T(np.load(s.d / 'aug_x.npy'))])
+            s.plen = torch.cat([s.plen, T(np.load(s.d / 'aug_len.npy'))])
+            s.src = torch.cat([s.src, T(np.load(s.d / 'aug_src.npy'))])
+        s.orig = torch.arange(len(s.pool), device=s.dev) < len(s.seqs)
 
     @torch.no_grad()
-    def predict(model, idx, mean, std, off=False):
+    def predict(s, model, idx, mean, std, off=False):
         model.eval()
         out = []
         for i in range(0, len(idx), 512):
             j = idx[i:i + 512]
-            z, m = prep(X32[j], N0[j], mean, std)
-            z = z * keep
+            z, m = prep(s.X[j], s.n[j], mean, std)
+            z = z * s.keep
             if off:
-                z = blank(z, m, prox, flags)
-            with torch.autocast(dev, torch.float16, enabled=amp):
+                z = blank(z, m, s.prox, s.flags)
+            with torch.autocast(s.dev, torch.float16, enabled=s.amp):
                 out.append(model(z, m)[0].float().softmax(1))
         return torch.cat(out).cpu().numpy()
 
-    for seed, k in todo:
+    def fit(s, core, train_mask, val_idx, mean, std, seed, hp, variant='full', shuffle=False):
+        """Train on the recordings in train_mask (+ their augmented copies), predict val_idx.
+        Returns (EMA model, {kind: probabilities})."""
         torch.manual_seed(seed)
-        mean, std = scaler(d, k, dev, cols)
-        tr = (fold[psrc] != k).nonzero().squeeze(1)
-        va = (fold == k).nonzero().squeeze(1)
-        n_tr = int((fold != k).sum())
-        steps = n_tr // a.bs
-        model = NETS[core](imu, used, L).to(dev)
+        mean, std = (torch.as_tensor(v, dtype=torch.float32, device=s.dev) for v in (mean, std))
+        Y = s.Y[torch.randperm(len(s.Y), device=s.dev)] if shuffle else s.Y
+        tr = train_mask[s.src].nonzero().squeeze(1)
+        n_tr, bs = int(train_mask.sum()), hp['bs']
+        steps = n_tr // bs
+        model = NETS[core](s.imu, [] if variant == 'imu' else s.prox, s.L, hp['d'], hp['drop']).to(s.dev)
         ema = copy.deepcopy(model).requires_grad_(False)
-        opt = torch.optim.AdamW(model.parameters(), lr=a.lr, weight_decay=1e-2)
-        sched = torch.optim.lr_scheduler.OneCycleLR(opt, a.lr, total_steps=a.epochs * steps, pct_start=0.05)
-        gs = torch.amp.GradScaler(enabled=amp)
-        for _ in range(a.epochs):
+        opt = torch.optim.AdamW(model.parameters(), lr=hp['lr'], weight_decay=1e-2)
+        sched = torch.optim.lr_scheduler.OneCycleLR(opt, hp['lr'], total_steps=hp['epochs'] * steps, pct_start=0.05)
+        gs = torch.amp.GradScaler(enabled=s.amp)
+        for _ in range(hp['epochs']):
             model.train()
-            perm = tr[torch.randperm(len(tr), device=dev)[:n_tr]]     # an epoch = as many samples as original train rows
-            for s in range(steps):
-                idx = perm[s * a.bs:(s + 1) * a.bs]
-                z, m = prep(pool[idx], plen[idx], mean, std)
-                ph = torch.where(isorig[idx, None], P0[psrc[idx]], -100)   # phase labels exist for originals only
-                with torch.autocast(dev, torch.float16, enabled=amp):
-                    lg, pl = model(z * keep, m)
-                    loss = F.cross_entropy(lg.float(), Y[psrc[idx]], label_smoothing=0.1)
-                    if a.phase:
-                        loss = loss + a.phase * F.cross_entropy(pl.float().transpose(1, 2), ph, ignore_index=-100)
+            perm = tr[torch.randperm(len(tr), device=s.dev)[:n_tr]]   # an epoch = as many samples as original train rows
+            for i in range(steps):
+                idx = perm[i * bs:(i + 1) * bs]
+                z, m = prep(s.pool[idx], s.plen[idx], mean, std)
+                ph = torch.where(s.orig[idx, None], s.P[s.src[idx]], -100)   # phase labels exist for originals only
+                with torch.autocast(s.dev, torch.float16, enabled=s.amp):
+                    lg, pl = model(z * s.keep, m)
+                    loss = F.cross_entropy(lg.float(), Y[s.src[idx]], label_smoothing=0.1)
+                    if hp['phase']:
+                        loss = loss + hp['phase'] * F.cross_entropy(pl.float().transpose(1, 2), ph, ignore_index=-100)
                 opt.zero_grad(set_to_none=True)
                 gs.scale(loss).backward()
                 gs.unscale_(opt)
@@ -110,14 +114,31 @@ def train(core, a):
                 torch._foreach_lerp_(list(ema.parameters()), list(model.parameters()), 0.005)
         for be, bm in zip(ema.buffers(), model.buffers()):
             be.copy_(bm)
-        y = Y[va].cpu().numpy()
-        res = {'imu': predict(ema, va, mean, std)} if a.variant == 'imu' else \
-              {'full': predict(ema, va, mean, std), 'blank': predict(ema, va, mean, std, off=True)}
+        if variant == 'imu':
+            return ema, {'imu': s.predict(ema, val_idx, mean, std)}
+        return ema, {'full': s.predict(ema, val_idx, mean, std), 'blank': s.predict(ema, val_idx, mean, std, off=True)}
+
+
+def train(core, a):
+    kinds = ['imu'] if a.variant == 'imu' else ['full', 'blank']
+    todo = [(s, k) for s in a.seeds for k in a.folds if not all(oof_path(a.name, kd, s, k).exists() for kd in kinds)]
+    if not todo:
+        print(f'{a.name} {a.variant}: all requested runs already done', flush=True)
+        return
+    D = Data(a.data, a.aug, a.drop_sub)
+    print(f'{a.name} {a.variant} on {D.dev}: {len(D.seqs)} recordings, pool {len(D.pool)}, {len(todo)} runs, hp {a.hp}',
+          flush=True)
+    for seed, k in todo:
+        mean, std = scaler(D.d, k, D.dev, D.cols)                      # stored fold scaler = what inference uses
+        va = (D.fold == k).nonzero().squeeze(1)
+        model, res = D.fit(core, D.fold != k, va, mean, std, seed, a.hp, a.variant, a.shuffle_labels)
         for kind, p in res.items():
             save_oof(a.name, kind, seed, k, p)
         if a.save:
-            torch.save({'cfg': dict(core=core, imu=imu, prox=used, L=L), 'sd': ema.state_dict()},
+            torch.save({'cfg': dict(core=core, imu=D.imu, prox=[] if a.variant == 'imu' else D.prox, L=D.L,
+                                    d=a.hp['d'], drop=a.hp['drop']), 'sd': model.state_dict()},
                        Path('runs') / a.name / f'{a.variant}_s{seed}_f{k}.pt')
+        y = D.Y[va].cpu().numpy()
         print(f'{a.name} {a.variant} seed {seed} fold {k}: ' +
               '  '.join(f'{kd} {score(y, p):.4f}' for kd, p in res.items()), flush=True)
 

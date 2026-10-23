@@ -1,36 +1,61 @@
-# Training the models
+# Training, tuning and evaluating the models
 
 ```
 models/
-  common.py            data shaping, GPU scaling, competition metric, OOF files, subject bootstrap
+  common.py            data shaping, GPU scaling, competition metric, OOF files, bootstrap, Holm
   seqnet.py            shared blocks + base network          cnn.py  gru.py  transformer.py  cnn_gru.py (main)
   lgbm.py xgb.py rf.py mlp.py   summary-feature models        registry.py  name -> model
-  hybrids.py           blend / stacker / trees-on-probabilities     evaluate.py  tables, CIs, hybrids
+  hybrids.py           blend / stacker / trees-on-probabilities
+  evaluate.py          table | compare | hybrid | analysis
   train/
     nn_trainer.py      loop shared by the networks             tree_trainer.py  loop shared by the tree-family models
     cnn.py gru.py transformer.py cnn_gru.py lgbm.py xgb.py rf.py mlp.py   one entry point per model
-    augment.py         pre-computes augmented copies           run_all.py       the whole pipeline, in parallel
+    augment.py         pre-computes augmented copies           tune.py          nested Optuna tuning
+    run_all.py         the whole pipeline, in parallel
 submission/submit.py   the Kaggle inference notebook
 ```
 
-**Everything at once** (from the repo root, after `pip install -r requirements.txt`):
+## Run everything
 
 ```
-python -m models.train.run_all --data-zip <competition zip or folder> --ablations
+python -m models.train.run_all --data-zip <competition zip or folder> --tune --ablations --sanity
 ```
 
-**One model** (e.g. while debugging): `python -m models.train.cnn_gru --variant full --folds 0 --seeds 0 --epochs 5`
-(`--variant imu` for the motion-only model; trees: `python -m models.train.lgbm`).
+Re-running the same command resumes: finished runs and finished tuning are skipped. A quick first pass:
+`--seeds 0` (one seed instead of three) and no `--ablations`.
 
-**Results** are plain files and survive interruptions (finished runs are skipped on re-run):
+## How the results stay honest
+
+| Rule | Where |
+| --- | --- |
+| Folds are split by person; the test set has new people | `sequences.csv` `fold`, built by the preprocessing |
+| Nothing is chosen on a reported fold: fixed epochs, EMA weights of the last epoch | `nn_trainer.py` |
+| Scalers are fitted on training recordings only; augmented copies of validation people are never trained on | `common.py`, `nn_trainer.py` |
+| Tuning sees only outer folds 1-4 (inner subject folds); outer fold 0 is untouched, reported as `fold0` | `tune.py`, `evaluate.py table` |
+| Hybrids are fitted on the other folds' out-of-fold predictions only | `hybrids.py` |
+| 3 seeds, 95% subject-level bootstrap CIs (people are the independent units) | `evaluate.py table` |
+| "A beats B" only if the Holm-corrected bootstrap p-value < 0.05 (plus folds won) | `evaluate.py compare` |
+| Shuffled-label models must collapse to chance, otherwise something leaks | `run_all --sanity` |
+| The Kaggle path produces exactly the training inputs (parity tests) | `tests/test_models.py`, `scripts/02_parity_check.py` |
+
+## Results (plain files)
 
 | Path | Content |
 | --- | --- |
 | `runs/<model>/<kind>_s<seed>_f<fold>.npy` | out-of-fold probabilities (kind: `full`, `imu`, `blank`) |
-| `runs/cnn_gru/*.pt`, `runs/lgbm/*.joblib`, `runs/blend_weights.json` | the deployed models (only these keep weights) |
+| `runs/<deployed>/*.pt`, `*.joblib`, `runs/blend_weights.json`, `runs/deploy.json` | what the submission loads |
 | `runs/logs/` | one log per job |
-| `results/*.csv`, `results/last_eval.log` | tables with 95% subject-bootstrap CIs |
-| `cmi_models.zip`, `cmi_results.zip` | the two folders zipped for download / upload as a Kaggle Dataset |
+| `results/params/*.json`, `*_trials.csv` | tuned settings and every tuning trial |
+| `results/table_*.csv`, `compare_*.csv`, `analysis_*/` | report tables, statistics, confusion matrices, per-person scores |
+| `cmi_models.zip`, `cmi_results.zip` | `runs/` and `results/` zipped for download / upload as Kaggle Datasets |
 
-After training, `python -m models.evaluate table|diff|hybrid ...` (see its docstring) produces every report number.
-Tests: `python -m pytest tests/test_models.py`.
+## Single steps
+
+```
+python -m models.train.cnn_gru --variant full --folds 0 --seeds 0 --epochs 5     # one network, one fold
+python -m models.train.lgbm --params results/params/lgbm.json --name lgbm_tuned  # tuned tree model
+python -m models.train.tune --model cnn_gru --trials 12
+python -m models.evaluate compare cnn_gru_tuned lgbm_tuned cnn gru transformer xgb rf mlp
+python -m models.evaluate analysis cnn_gru_tuned
+python -m pytest tests/test_models.py
+```

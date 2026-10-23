@@ -5,6 +5,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
 
-def make(seed=0, trees=None):
+def make(seed=0, trees=None, **kw):
+    p = dict(hidden_layer_sizes=(512, 256), alpha=1e-3, early_stopping=True, max_iter=200)
     return make_pipeline(SimpleImputer(strategy='median'), StandardScaler(),
-                         MLPClassifier((512, 256), alpha=1e-3, early_stopping=True, max_iter=200, random_state=seed))
+                         MLPClassifier(**{**p, **kw}, random_state=seed))
