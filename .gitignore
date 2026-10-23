@@ -29,3 +29,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# model outputs
+runs/
+data/processed/aug_*.npy
