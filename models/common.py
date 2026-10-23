@@ -79,10 +79,19 @@ def combined(y, pf, pi):
 
 
 # ---- out-of-fold files: runs/<name>/<kind>_s<seed>_f<fold>.npy (probabilities of that fold's rows) ----
+def oof_path(name, kind, seed, k):
+    return Path('runs') / name / f'{kind}_s{seed}_f{k}.npy'
+
+
 def save_oof(name, kind, seed, k, probs):
-    p = Path('runs') / name
-    p.mkdir(parents=True, exist_ok=True)
-    np.save(p / f'{kind}_s{seed}_f{k}.npy', probs)
+    p = oof_path(name, kind, seed, k)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    np.save(p, probs)
+
+
+def complete(name, kinds=('full', 'imu')):
+    """True when every fold has predictions of every kind (i.e. the run finished)."""
+    return all(list((Path('runs') / name).glob(f'{kd}_s*_f{k}.npy')) for kd in kinds for k in range(5))
 
 
 def load_oof(name, kind, fold):

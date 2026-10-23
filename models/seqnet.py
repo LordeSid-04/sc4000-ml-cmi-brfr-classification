@@ -1,5 +1,8 @@
-"""One configurable network: motion branch (+ optional proximity branch) -> fuse -> sequence core -> attention pooling.
-core: cnn | gru | transformer | cnn_gru (main model). The same stem, pooling and heads are used for every core."""
+"""Shared building blocks and the base network. Each architecture (cnn, gru, transformer, cnn_gru) is a small
+subclass in its own file that only chooses the conv depth and the sequence core.
+
+  motion branch (+ proximity branch when thermopile/ToF are used) -> fuse -> core -> attention + mean pooling -> heads
+  heads: 18-way gesture softmax (main) and a per-step transition/pause/gesture classifier (auxiliary)."""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,40 +32,33 @@ def branch(n_in, n_blocks):
     return nn.Sequential(*layers), c
 
 
-class Net(nn.Module):
-    def __init__(s, imu, prox, core='cnn_gru', L=128, d=192, hid=128, drop=0.2):
+class SeqNet(nn.Module):
+    n_blocks = 3                                    # conv depth per branch (0 = 1x1 stem only)
+
+    def __init__(s, imu, prox, L=128, d=192, drop=0.2):
         super().__init__()
-        s.core = core
         s.register_buffer('imu', torch.tensor(imu, dtype=torch.long))
         s.register_buffer('prox', torch.tensor(prox, dtype=torch.long))
-        nb = 3 if core in ('cnn', 'cnn_gru') else 0
-        s.b_imu, c = branch(len(imu), nb)
-        s.b_prox, c2 = branch(len(prox), nb) if prox else (None, 0)
+        s.b_imu, c = branch(len(imu), s.n_blocks)
+        s.b_prox, c2 = branch(len(prox), s.n_blocks) if prox else (None, 0)
         s.fuse = nn.Conv1d(c + c2, d, 1)
-        if core in ('gru', 'cnn_gru'):
-            s.seq, do = nn.GRU(d, hid, 2, batch_first=True, bidirectional=True, dropout=drop), 2 * hid
-        elif core == 'transformer':
-            s.pos = nn.Parameter(torch.randn(1, L, d) * 0.02)
-            s.seq = nn.TransformerEncoder(nn.TransformerEncoderLayer(d, 4, 2 * d, drop, batch_first=True, norm_first=True),
-                                          4, enable_nested_tensor=False)
-            do = d
-        else:
-            s.seq, do = None, d
-        s.att = nn.Linear(do, 1)
-        s.head = nn.Sequential(nn.Dropout(drop), nn.Linear(2 * do, 18))
-        s.phase = nn.Linear(do, 3)         # auxiliary: transition / pause / gesture for every time step
+        out = s.build_core(d, L, drop)
+        s.att = nn.Linear(out, 1)
+        s.head = nn.Sequential(nn.Dropout(drop), nn.Linear(2 * out, 18))
+        s.phase = nn.Linear(out, 3)
+
+    def build_core(s, d, L, drop):                  # override: create the sequence layer, return its output size
+        return d
+
+    def core(s, h, m):                              # override: (B, L, d) -> (B, L, out)
+        return h
 
     def forward(s, z, m):
         h = s.b_imu(z[..., s.imu].transpose(1, 2))
         if s.b_prox is not None:
             h = torch.cat([h, s.b_prox(z[..., s.prox].transpose(1, 2))], 1)
         mk = m[..., None]
-        h = s.fuse(h).transpose(1, 2) * mk
-        if s.core == 'transformer':
-            h = s.seq(h + s.pos, src_key_padding_mask=m == 0)
-        elif s.seq is not None:
-            h = s.seq(h)[0]
-        h = h * mk
+        h = s.core(s.fuse(h).transpose(1, 2) * mk, m) * mk
         w = s.att(h).squeeze(-1).masked_fill(m == 0, -1e4).softmax(1)[..., None]
         pooled = torch.cat([(w * h).sum(1), h.sum(1) / mk.sum(1).clamp(min=1)], 1)
         return s.head(pooled), s.phase(h)

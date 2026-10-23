@@ -1,6 +1,6 @@
 """Pre-compute augmented copies of every training recording (run once, CPU, parallel).
 Uses the repo's physics-aware augment() (crop, stretch, wrist tilt, yaw, scale, jitter, sensor dropout) and re-featurises,
-so training itself stays a pure-GPU loop.   python make_aug.py [--data data/processed] [--copies 6]"""
+so training itself stays a pure-GPU loop.   python -m models.train.augment [--data data/processed] [--copies 6]"""
 import argparse
 from multiprocessing import Pool
 

@@ -1,6 +1,6 @@
 """Kaggle inference notebook (internet off). Attach two private datasets:
   cmi-code   = this repo (preprocessing/, models/, data/processed/{meta.json,scalers/,tree_full.parquet})
-  cmi-models = runs/ (checkpoints, trained trees) + results/blend_weights.json
+  cmi-models = the unzipped cmi_models.zip (runs/: checkpoints, fitted trees, blend_weights.json at its root)
 Every recording is routed by its sensors: no thermopile AND no ToF -> motion-only models, else all-sensor models.
 Prediction = w * mean(NN folds) + (1 - w) * mean(tree folds), w from `evaluate.py hybrid`."""
 import glob
@@ -18,7 +18,7 @@ CODE = os.environ.get('CMI_CODE', '/kaggle/input/cmi-code')
 RUNS = os.environ.get('CMI_RUNS', '/kaggle/input/cmi-models')
 NN, GB = 'cnn_gru', 'lgbm'                     # which trained runs to deploy
 sys.path.insert(0, CODE)
-from models.nets import Net                                            # noqa: E402
+from models.registry import NETS as ARCH                               # noqa: E402
 from preprocessing.constants import GESTURES                           # noqa: E402
 from preprocessing.pipeline import preprocess                          # noqa: E402
 from preprocessing.step5_shaping import Scaler, fixed_length, tree_summary   # noqa: E402
@@ -35,7 +35,8 @@ for v in ('full', 'imu'):
     NETS[v] = []
     for f in sorted(glob.glob(f'{RUNS}/{NN}/{v}_s*_f*.pt')):
         ck = torch.load(f, map_location='cpu')
-        net = Net(**ck['cfg'])
+        cfg = dict(ck['cfg'])
+        net = ARCH[cfg.pop('core')](**cfg)
         net.load_state_dict(ck['sd'])
         NETS[v].append((net.eval(), int(f.rsplit('_f', 1)[1][:-3])))
 assert GBS and NETS['full'] and NETS['imu'], 'models not found'
