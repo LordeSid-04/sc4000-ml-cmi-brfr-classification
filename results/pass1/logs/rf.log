@@ -1,0 +1,6 @@
+rf: 5 runs, params defaults
+rf seed 0 fold 0: full 0.8204  imu 0.7477
+rf seed 0 fold 1: full 0.7726  imu 0.7070
+rf seed 0 fold 2: full 0.7764  imu 0.6886
+rf seed 0 fold 3: full 0.7386  imu 0.6907
+rf seed 0 fold 4: full 0.7640  imu 0.6925

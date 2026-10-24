@@ -1,0 +1,6 @@
+lgbm_tuned: 5 runs, params {'num_leaves': 108, 'learning_rate': 0.028050052371603986, 'n_estimators': 800, 'colsample_bytree': 0.3059574537387493, 'min_child_samples': 53, 'reg_lambda': 7.374579422813057}
+lgbm_tuned seed 0 fold 0: full 0.8421  imu 0.7792
+lgbm_tuned seed 0 fold 1: full 0.8126  imu 0.7390
+lgbm_tuned seed 0 fold 2: full 0.7997  imu 0.7173
+lgbm_tuned seed 0 fold 3: full 0.7759  imu 0.7093
+lgbm_tuned seed 0 fold 4: full 0.8024  imu 0.7296

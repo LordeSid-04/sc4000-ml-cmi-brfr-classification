@@ -1,0 +1,98 @@
+{
+  "passed": 23,
+  "total": 23,
+  "checks": {
+    "row count matches source": {
+      "pass": true,
+      "detail": "574945 rows"
+    },
+    "sequence count": {
+      "pass": true,
+      "detail": "8151 sequences"
+    },
+    "no infinite values": {
+      "pass": true,
+      "detail": ""
+    },
+    "IMU features always present": {
+      "pass": true,
+      "detail": "19 columns"
+    },
+    "rotation features NaN exactly when rotation is missing": {
+      "pass": true,
+      "detail": "3692 rows without rotation"
+    },
+    "sensor columns NaN only for whole-recording dropouts (gaps filled)": {
+      "pass": true,
+      "detail": "recordings with a dead sensor: thm_1 104, thm_2 116, thm_3 100, thm_4 96, thm_5 482, tof_1_mean 96, tof_2_mean 96, tof_3_mean 96, tof_4_mean 96, tof_5_mean 434"
+    },
+    "ToF proximity in [0, 1]": {
+      "pass": true,
+      "detail": ""
+    },
+    "gravity direction is a unit vector": {
+      "pass": true,
+      "detail": "max deviation 5.96e-08"
+    },
+    "6D rotation columns are orthonormal": {
+      "pass": true,
+      "detail": ""
+    },
+    "no subject appears in two folds": {
+      "pass": true,
+      "detail": "81 subjects"
+    },
+    "all 18 gestures in every fold": {
+      "pass": true,
+      "detail": "{0: 18, 1: 18, 2: 18, 3: 18, 4: 18}"
+    },
+    "BFRB share similar across folds": {
+      "pass": true,
+      "detail": "0.626-0.628"
+    },
+    "one label per recording": {
+      "pass": true,
+      "detail": ""
+    },
+    "phase labels present": {
+      "pass": true,
+      "detail": "counts [223955, 95173, 255817]"
+    },
+    "every recording except one has gesture rows": {
+      "pass": true,
+      "detail": "1 without"
+    },
+    "no train-only column leaks into features": {
+      "pass": true,
+      "detail": ""
+    },
+    "fold scaler gives mean ~0 on training rows": {
+      "pass": true,
+      "detail": ""
+    },
+    "scaled values finite (NaN -> 0)": {
+      "pass": true,
+      "detail": ""
+    },
+    "canonical store aligned with sequences.csv": {
+      "pass": true,
+      "detail": ""
+    },
+    "canonical quaternions are unit length": {
+      "pass": true,
+      "detail": ""
+    },
+    "row slices match recording lengths": {
+      "pass": true,
+      "detail": ""
+    },
+    "pipeline config: smoothing off": {
+      "pass": true,
+      "detail": ""
+    },
+    "label-tuned orientation disabled for validated dataset": {
+      "pass": true,
+      "detail": ""
+    }
+  }
+}

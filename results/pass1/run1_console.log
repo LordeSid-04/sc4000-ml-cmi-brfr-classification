@@ -1,0 +1,514 @@
+Time
+#
+Log Message
+12.5s	0	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+12.5s	1	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+12.5s	2	0.00s - to python to disable frozen modules.
+12.5s	3	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+13.3s	4	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+13.3s	5	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+13.3s	6	0.00s - to python to disable frozen modules.
+13.3s	7	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+19.1s	8	code: ['/kaggle/input/datasets/lordeclinton/cmi-code/sc4000-ml-cmi-brfr-classification-modelling/run_pipeline.py']
+19.1s	9	data: ['/kaggle/input/competitions/cmi-detect-behavior-with-sensor-data/train_demographics.csv']
+27.2s	10	/kaggle/working/repo
+27.2s	11	data	       README.md	 run_pipeline.py  tests
+27.2s	12	models	       requirements.txt  scripts	  TRAINING.md
+27.2s	13	preprocessing  results		 submission	  VALIDATION.md
+27.3s	14	name, memory.total [MiB]
+27.3s	15	Tesla T4, 15360 MiB
+27.3s	16	Tesla T4, 15360 MiB
+54.4s	17	2.11.0+cu128 GPUs: 2
+57.1s	18	building the dataset (about 5 minutes) ...
+57.2s	19	
+57.2s	20	=== unit tests ===
+70.2s	21	....................................................                     [100%]
+70.2s	22	=============================== warnings summary ===============================
+70.2s	23	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	24	  /usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:64: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+70.2s	25	    prop = Group((name + Suppress("=") + comma_separated(value)) | oneOf(_CONSTANTS))
+70.2s	26	
+70.2s	27	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	28	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	29	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	30	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	31	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	32	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	33	  /usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:85: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+70.2s	34	    parse = parser.parseString(pattern)
+70.2s	35	
+70.2s	36	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	37	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	38	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	39	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	40	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	41	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	42	  /usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:89: PyparsingDeprecationWarning: 'resetCache' deprecated - use 'reset_cache'
+70.2s	43	    parser.resetCache()
+70.2s	44	
+70.2s	45	-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+70.2s	46	52 passed, 13 warnings in 10.05s
+77.9s	47	--- unit tests: PASS (21s)
+77.9s	48	
+77.9s	49	=== build dataset ===
+106.6s	50	loaded (574945, 341) in 28s
+122.6s	51	  1000 sequences (16s)
+138.1s	52	  2000 sequences (31s)
+153.6s	53	  3000 sequences (47s)
+169.0s	54	  4000 sequences (62s)
+184.2s	55	  5000 sequences (78s)
+199.7s	56	  6000 sequences (93s)
+214.9s	57	  7000 sequences (108s)
+230.1s	58	  8000 sequences (123s)
+268.3s	59	{
+268.3s	60	  "fixed_length": 128,
+268.3s	61	  "length_kept_whole": 0.9512943197153724,
+268.3s	62	  "sequences": 8151,
+268.3s	63	  "rows": 574945,
+268.3s	64	  "sequences_with_issues": 0
+268.3s	65	}
+268.3s	66	117 per-row features; 795 tree features
+268.3s	67	done in 189s
+268.7s	68	--- build dataset: PASS (191s)
+268.7s	69	
+268.7s	70	=== parity check ===
+302.7s	71	{
+302.7s	72	  "checked": 377,
+302.7s	73	  "mismatched": [],
+302.7s	74	  "max_abs_difference": 0.0,
+302.7s	75	  "test_sequences_ok": "2/2"
+302.7s	76	}
+303.0s	77	--- parity check: PASS (34s)
+303.0s	78	
+303.0s	79	=== quality checks ===
+305.5s	80	PASS  row count matches source  574945 rows
+305.5s	81	PASS  sequence count  8151 sequences
+305.5s	82	PASS  no infinite values  
+305.5s	83	PASS  IMU features always present  19 columns
+305.5s	84	PASS  rotation features NaN exactly when rotation is missing  3692 rows without rotation
+305.5s	85	PASS  sensor columns NaN only for whole-recording dropouts (gaps filled)  recordings with a dead sensor: thm_1 104, thm_2 116, thm_3 100, thm_4 96, thm_5 482, tof_1_mean 96, tof_2_mean 96, tof_3_mean 96, tof_4_mean 96, tof_5_mean 434
+305.5s	86	PASS  ToF proximity in [0, 1]  
+305.5s	87	PASS  gravity direction is a unit vector  max deviation 5.96e-08
+305.5s	88	PASS  6D rotation columns are orthonormal  
+305.5s	89	PASS  no subject appears in two folds  81 subjects
+305.5s	90	PASS  all 18 gestures in every fold  {0: 18, 1: 18, 2: 18, 3: 18, 4: 18}
+305.5s	91	PASS  BFRB share similar across folds  0.626-0.628
+305.5s	92	PASS  one label per recording  
+305.5s	93	PASS  phase labels present  counts [223955, 95173, 255817]
+305.5s	94	PASS  every recording except one has gesture rows  1 without
+305.5s	95	PASS  no train-only column leaks into features  
+305.5s	96	PASS  fold scaler gives mean ~0 on training rows  
+305.5s	97	PASS  scaled values finite (NaN -> 0)  
+305.5s	98	PASS  canonical store aligned with sequences.csv  
+305.5s	99	PASS  canonical quaternions are unit length  
+305.5s	100	PASS  row slices match recording lengths  
+305.5s	101	PASS  pipeline config: smoothing off  
+305.5s	102	PASS  label-tuned orientation disabled for validated dataset  
+305.5s	103	
+305.5s	104	23/23 checks passed
+305.6s	105	--- quality checks: PASS (3s)
+333.1s	106	published data/processed; release zip outputs/release/processed_large_files.zip (279 MB)
+333.1s	107	
+333.1s	108	=== summary ===
+333.1s	109	  PASS  unit tests                      21s
+333.1s	110	  PASS  build dataset                  191s
+333.1s	111	  PASS  parity check                    34s
+333.1s	112	  PASS  quality checks                   3s
+333.1s	113	
+333.1s	114	ALL STAGES PASSED: data/processed/ is ready (4.6 min)
+333.1s	115	pre-computing augmented copies ...
+449.1s	116	48906 augmented sequences saved to data/processed
+449.8s	117	tuning cnn_gru (12 trials), lgbm (20 trials) in parallel ...
+12547.8s	118	tune cnn_gru: ok 22 min
+12547.8s	119	tune lgbm: ok 202 min
+12547.8s	120	60 network jobs (4 at a time, 2 GPU(s)) + 6 tree models on the CPU, seeds [0]; deploying cnn_gru_tuned + lgbm_tuned
+12707.1s	121	[1/66] cnn_gru_tuned_full_f1 ok 2.7 min   (elapsed 211 min)
+12707.6s	122	[2/66] cnn_gru_tuned_full_f2 ok 2.7 min   (elapsed 211 min)
+12709.2s	123	[3/66] cnn_gru_tuned_full_f3 ok 2.7 min   (elapsed 211 min)
+12711.8s	124	[4/66] cnn_gru_tuned_full_f0 ok 2.7 min   (elapsed 211 min)
+12824.7s	125	[5/66] cnn_gru_tuned_imu_f1 ok 1.9 min   (elapsed 213 min)
+12827.0s	126	[6/66] cnn_gru_tuned_imu_f0 ok 2.0 min   (elapsed 213 min)
+12827.8s	127	[7/66] cnn_gru_tuned_imu_f2 ok 1.9 min   (elapsed 213 min)
+12879.0s	128	[8/66] cnn_gru_tuned_full_f4 ok 2.9 min   (elapsed 214 min)
+12931.6s	129	[9/66] cnn_gru_tuned_imu_f4 ok 1.7 min   (elapsed 215 min)
+12946.4s	130	[10/66] cnn_gru_tuned_imu_f3 ok 2.0 min   (elapsed 215 min)
+13006.3s	131	[11/66] cnn_gru_full_f0 ok 3.0 min   (elapsed 216 min)
+13029.6s	132	[12/66] cnn_gru_full_f1 ok 2.5 min   (elapsed 216 min)
+13087.2s	133	[13/66] cnn_gru_full_f2 ok 2.6 min   (elapsed 217 min)
+13108.4s	134	[14/66] cnn_gru_full_f3 ok 2.7 min   (elapsed 218 min)
+13138.2s	135	[15/66] cnn_gru_imu_f0 ok 1.8 min   (elapsed 218 min)
+13164.3s	136	[16/66] cnn_gru_full_f4 ok 2.6 min   (elapsed 218 min)
+13203.1s	137	[17/66] cnn_gru_imu_f1 ok 1.9 min   (elapsed 219 min)
+13214.1s	138	[18/66] cnn_gru_imu_f2 ok 1.8 min   (elapsed 219 min)
+13253.1s	139	[19/66] cnn_gru_imu_f3 ok 1.9 min   (elapsed 220 min)
+13271.4s	140	[20/66] cnn_gru_imu_f4 ok 1.8 min   (elapsed 220 min)
+13323.9s	141	[21/66] cnn_full_f0 ok 2.0 min   (elapsed 221 min)
+13342.0s	142	[22/66] cnn_full_f1 ok 2.1 min   (elapsed 221 min)
+13382.7s	143	[23/66] cnn_full_f2 ok 2.2 min   (elapsed 222 min)
+13386.8s	144	[24/66] cnn_full_f3 ok 1.9 min   (elapsed 222 min)
+13421.1s	145	[25/66] cnn_imu_f0 ok 1.3 min   (elapsed 223 min)
+13461.9s	146	[26/66] cnn_full_f4 ok 2.3 min   (elapsed 223 min)
+13463.8s	147	[27/66] cnn_imu_f2 ok 1.3 min   (elapsed 223 min)
+13466.0s	148	[28/66] cnn_imu_f1 ok 1.4 min   (elapsed 223 min)
+13509.0s	149	[29/66] cnn_imu_f3 ok 1.5 min   (elapsed 224 min)
+13536.3s	150	[30/66] gru_full_f0 ok 1.2 min   (elapsed 225 min)
+13538.3s	151	[31/66] gru_full_f1 ok 1.2 min   (elapsed 225 min)
+13549.3s	152	[32/66] cnn_imu_f4 ok 1.5 min   (elapsed 225 min)
+13584.5s	153	[33/66] gru_full_f2 ok 1.3 min   (elapsed 225 min)
+13611.8s	154	[34/66] gru_full_f4 ok 1.2 min   (elapsed 226 min)
+13613.4s	155	[35/66] gru_full_f3 ok 1.3 min   (elapsed 226 min)
+13626.4s	156	[36/66] gru_imu_f0 ok 1.3 min   (elapsed 226 min)
+13655.1s	157	[37/66] gru_imu_f1 ok 1.2 min   (elapsed 227 min)
+13684.3s	158	[38/66] gru_imu_f3 ok 1.2 min   (elapsed 227 min)
+13685.3s	159	[39/66] gru_imu_f2 ok 1.2 min   (elapsed 227 min)
+13700.8s	160	[40/66] gru_imu_f4 ok 1.2 min   (elapsed 227 min)
+13860.9s	161	[41/66] transformer_full_f0 ok 3.4 min   (elapsed 230 min)
+13885.1s	162	[42/66] transformer_full_f2 ok 3.3 min   (elapsed 230 min)
+13887.7s	163	[43/66] transformer_full_f1 ok 3.4 min   (elapsed 231 min)
+13906.3s	164	[44/66] transformer_full_f3 ok 3.4 min   (elapsed 231 min)
+14062.7s	165	[45/66] transformer_full_f4 ok 3.4 min   (elapsed 233 min)
+14086.5s	166	[46/66] transformer_imu_f1 ok 3.3 min   (elapsed 234 min)
+14093.0s	167	[47/66] transformer_imu_f0 ok 3.5 min   (elapsed 234 min)
+14113.0s	168	[48/66] transformer_imu_f2 ok 3.4 min   (elapsed 234 min)
+14233.2s	169	[49/66] transformer_imu_f3 ok 2.8 min   (elapsed 236 min)
+14263.9s	170	[50/66] transformer_imu_f4 ok 3.0 min   (elapsed 237 min)
+14266.5s	171	[51/66] sanity_shuffled_cnn_gru_full_f0 ok 2.9 min   (elapsed 237 min)
+14283.8s	172	[52/66] sanity_shuffled_cnn_gru_full_f1 ok 2.8 min   (elapsed 237 min)
+12.5s	173	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+12.5s	174	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+12.5s	175	0.00s - to python to disable frozen modules.
+12.5s	176	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+13.3s	177	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+13.3s	178	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+13.3s	179	0.00s - to python to disable frozen modules.
+13.3s	180	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+19.1s	181	code: ['/kaggle/input/datasets/lordeclinton/cmi-code/sc4000-ml-cmi-brfr-classification-modelling/run_pipeline.py']
+19.1s	182	data: ['/kaggle/input/competitions/cmi-detect-behavior-with-sensor-data/train_demographics.csv']
+27.2s	183	/kaggle/working/repo
+27.2s	184	data	       README.md	 run_pipeline.py  tests
+27.2s	185	models	       requirements.txt  scripts	  TRAINING.md
+27.2s	186	preprocessing  results		 submission	  VALIDATION.md
+27.3s	187	name, memory.total [MiB]
+27.3s	188	Tesla T4, 15360 MiB
+27.3s	189	Tesla T4, 15360 MiB
+54.4s	190	2.11.0+cu128 GPUs: 2
+57.1s	191	building the dataset (about 5 minutes) ...
+57.2s	192	
+57.2s	193	=== unit tests ===
+70.2s	194	....................................................                     [100%]
+70.2s	195	=============================== warnings summary ===============================
+70.2s	196	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	197	  /usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:64: PyparsingDeprecationWarning: 'oneOf' deprecated - use 'one_of'
+70.2s	198	    prop = Group((name + Suppress("=") + comma_separated(value)) | oneOf(_CONSTANTS))
+70.2s	199	
+70.2s	200	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	201	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	202	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	203	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	204	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	205	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	206	  /usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:85: PyparsingDeprecationWarning: 'parseString' deprecated - use 'parse_string'
+70.2s	207	    parse = parser.parseString(pattern)
+70.2s	208	
+70.2s	209	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	210	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	211	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	212	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	213	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	214	tests/test_models.py::test_tree_builders_accept_tuned_settings[lgbm]
+70.2s	215	  /usr/local/lib/python3.13/dist-packages/matplotlib/_fontconfig_pattern.py:89: PyparsingDeprecationWarning: 'resetCache' deprecated - use 'reset_cache'
+70.2s	216	    parser.resetCache()
+70.2s	217	
+70.2s	218	-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+70.2s	219	52 passed, 13 warnings in 10.05s
+77.9s	220	--- unit tests: PASS (21s)
+77.9s	221	
+77.9s	222	=== build dataset ===
+106.6s	223	loaded (574945, 341) in 28s
+122.6s	224	  1000 sequences (16s)
+138.1s	225	  2000 sequences (31s)
+153.6s	226	  3000 sequences (47s)
+169.0s	227	  4000 sequences (62s)
+184.2s	228	  5000 sequences (78s)
+199.7s	229	  6000 sequences (93s)
+214.9s	230	  7000 sequences (108s)
+230.1s	231	  8000 sequences (123s)
+268.3s	232	{
+268.3s	233	  "fixed_length": 128,
+268.3s	234	  "length_kept_whole": 0.9512943197153724,
+268.3s	235	  "sequences": 8151,
+268.3s	236	  "rows": 574945,
+268.3s	237	  "sequences_with_issues": 0
+268.3s	238	}
+268.3s	239	117 per-row features; 795 tree features
+268.3s	240	done in 189s
+268.7s	241	--- build dataset: PASS (191s)
+268.7s	242	
+268.7s	243	=== parity check ===
+302.7s	244	{
+302.7s	245	  "checked": 377,
+302.7s	246	  "mismatched": [],
+302.7s	247	  "max_abs_difference": 0.0,
+302.7s	248	  "test_sequences_ok": "2/2"
+302.7s	249	}
+303.0s	250	--- parity check: PASS (34s)
+303.0s	251	
+303.0s	252	=== quality checks ===
+305.5s	253	PASS  row count matches source  574945 rows
+305.5s	254	PASS  sequence count  8151 sequences
+305.5s	255	PASS  no infinite values  
+305.5s	256	PASS  IMU features always present  19 columns
+305.5s	257	PASS  rotation features NaN exactly when rotation is missing  3692 rows without rotation
+305.5s	258	PASS  sensor columns NaN only for whole-recording dropouts (gaps filled)  recordings with a dead sensor: thm_1 104, thm_2 116, thm_3 100, thm_4 96, thm_5 482, tof_1_mean 96, tof_2_mean 96, tof_3_mean 96, tof_4_mean 96, tof_5_mean 434
+305.5s	259	PASS  ToF proximity in [0, 1]  
+305.5s	260	PASS  gravity direction is a unit vector  max deviation 5.96e-08
+305.5s	261	PASS  6D rotation columns are orthonormal  
+305.5s	262	PASS  no subject appears in two folds  81 subjects
+305.5s	263	PASS  all 18 gestures in every fold  {0: 18, 1: 18, 2: 18, 3: 18, 4: 18}
+305.5s	264	PASS  BFRB share similar across folds  0.626-0.628
+305.5s	265	PASS  one label per recording  
+305.5s	266	PASS  phase labels present  counts [223955, 95173, 255817]
+305.5s	267	PASS  every recording except one has gesture rows  1 without
+305.5s	268	PASS  no train-only column leaks into features  
+305.5s	269	PASS  fold scaler gives mean ~0 on training rows  
+305.5s	270	PASS  scaled values finite (NaN -> 0)  
+305.5s	271	PASS  canonical store aligned with sequences.csv  
+305.5s	272	PASS  canonical quaternions are unit length  
+305.5s	273	PASS  row slices match recording lengths  
+305.5s	274	PASS  pipeline config: smoothing off  
+305.5s	275	PASS  label-tuned orientation disabled for validated dataset  
+305.5s	276	
+305.5s	277	23/23 checks passed
+305.6s	278	--- quality checks: PASS (3s)
+333.1s	279	published data/processed; release zip outputs/release/processed_large_files.zip (279 MB)
+333.1s	280	
+333.1s	281	=== summary ===
+333.1s	282	  PASS  unit tests                      21s
+333.1s	283	  PASS  build dataset                  191s
+333.1s	284	  PASS  parity check                    34s
+333.1s	285	  PASS  quality checks                   3s
+333.1s	286	
+333.1s	287	ALL STAGES PASSED: data/processed/ is ready (4.6 min)
+333.1s	288	pre-computing augmented copies ...
+449.1s	289	48906 augmented sequences saved to data/processed
+449.8s	290	tuning cnn_gru (12 trials), lgbm (20 trials) in parallel ...
+12547.8s	291	tune cnn_gru: ok 22 min
+12547.8s	292	tune lgbm: ok 202 min
+12547.8s	293	60 network jobs (4 at a time, 2 GPU(s)) + 6 tree models on the CPU, seeds [0]; deploying cnn_gru_tuned + lgbm_tuned
+12707.1s	294	[1/66] cnn_gru_tuned_full_f1 ok 2.7 min   (elapsed 211 min)
+12707.6s	295	[2/66] cnn_gru_tuned_full_f2 ok 2.7 min   (elapsed 211 min)
+12709.2s	296	[3/66] cnn_gru_tuned_full_f3 ok 2.7 min   (elapsed 211 min)
+12711.8s	297	[4/66] cnn_gru_tuned_full_f0 ok 2.7 min   (elapsed 211 min)
+12824.7s	298	[5/66] cnn_gru_tuned_imu_f1 ok 1.9 min   (elapsed 213 min)
+12827.0s	299	[6/66] cnn_gru_tuned_imu_f0 ok 2.0 min   (elapsed 213 min)
+12827.8s	300	[7/66] cnn_gru_tuned_imu_f2 ok 1.9 min   (elapsed 213 min)
+12879.0s	301	[8/66] cnn_gru_tuned_full_f4 ok 2.9 min   (elapsed 214 min)
+12931.6s	302	[9/66] cnn_gru_tuned_imu_f4 ok 1.7 min   (elapsed 215 min)
+12946.4s	303	[10/66] cnn_gru_tuned_imu_f3 ok 2.0 min   (elapsed 215 min)
+13006.3s	304	[11/66] cnn_gru_full_f0 ok 3.0 min   (elapsed 216 min)
+13029.6s	305	[12/66] cnn_gru_full_f1 ok 2.5 min   (elapsed 216 min)
+13087.2s	306	[13/66] cnn_gru_full_f2 ok 2.6 min   (elapsed 217 min)
+13108.4s	307	[14/66] cnn_gru_full_f3 ok 2.7 min   (elapsed 218 min)
+13138.2s	308	[15/66] cnn_gru_imu_f0 ok 1.8 min   (elapsed 218 min)
+13164.3s	309	[16/66] cnn_gru_full_f4 ok 2.6 min   (elapsed 218 min)
+13203.1s	310	[17/66] cnn_gru_imu_f1 ok 1.9 min   (elapsed 219 min)
+13214.1s	311	[18/66] cnn_gru_imu_f2 ok 1.8 min   (elapsed 219 min)
+13253.1s	312	[19/66] cnn_gru_imu_f3 ok 1.9 min   (elapsed 220 min)
+13271.4s	313	[20/66] cnn_gru_imu_f4 ok 1.8 min   (elapsed 220 min)
+13323.9s	314	[21/66] cnn_full_f0 ok 2.0 min   (elapsed 221 min)
+13342.0s	315	[22/66] cnn_full_f1 ok 2.1 min   (elapsed 221 min)
+13382.7s	316	[23/66] cnn_full_f2 ok 2.2 min   (elapsed 222 min)
+13386.8s	317	[24/66] cnn_full_f3 ok 1.9 min   (elapsed 222 min)
+13421.1s	318	[25/66] cnn_imu_f0 ok 1.3 min   (elapsed 223 min)
+13461.9s	319	[26/66] cnn_full_f4 ok 2.3 min   (elapsed 223 min)
+13463.8s	320	[27/66] cnn_imu_f2 ok 1.3 min   (elapsed 223 min)
+13466.0s	321	[28/66] cnn_imu_f1 ok 1.4 min   (elapsed 223 min)
+13509.0s	322	[29/66] cnn_imu_f3 ok 1.5 min   (elapsed 224 min)
+13536.3s	323	[30/66] gru_full_f0 ok 1.2 min   (elapsed 225 min)
+13538.3s	324	[31/66] gru_full_f1 ok 1.2 min   (elapsed 225 min)
+13549.3s	325	[32/66] cnn_imu_f4 ok 1.5 min   (elapsed 225 min)
+13584.5s	326	[33/66] gru_full_f2 ok 1.3 min   (elapsed 225 min)
+13611.8s	327	[34/66] gru_full_f4 ok 1.2 min   (elapsed 226 min)
+13613.4s	328	[35/66] gru_full_f3 ok 1.3 min   (elapsed 226 min)
+13626.4s	329	[36/66] gru_imu_f0 ok 1.3 min   (elapsed 226 min)
+13655.1s	330	[37/66] gru_imu_f1 ok 1.2 min   (elapsed 227 min)
+13684.3s	331	[38/66] gru_imu_f3 ok 1.2 min   (elapsed 227 min)
+13685.3s	332	[39/66] gru_imu_f2 ok 1.2 min   (elapsed 227 min)
+13700.8s	333	[40/66] gru_imu_f4 ok 1.2 min   (elapsed 227 min)
+13860.9s	334	[41/66] transformer_full_f0 ok 3.4 min   (elapsed 230 min)
+13885.1s	335	[42/66] transformer_full_f2 ok 3.3 min   (elapsed 230 min)
+13887.7s	336	[43/66] transformer_full_f1 ok 3.4 min   (elapsed 231 min)
+13906.3s	337	[44/66] transformer_full_f3 ok 3.4 min   (elapsed 231 min)
+14062.7s	338	[45/66] transformer_full_f4 ok 3.4 min   (elapsed 233 min)
+14086.5s	339	[46/66] transformer_imu_f1 ok 3.3 min   (elapsed 234 min)
+14093.0s	340	[47/66] transformer_imu_f0 ok 3.5 min   (elapsed 234 min)
+14113.0s	341	[48/66] transformer_imu_f2 ok 3.4 min   (elapsed 234 min)
+14233.2s	342	[49/66] transformer_imu_f3 ok 2.8 min   (elapsed 236 min)
+14263.9s	343	[50/66] transformer_imu_f4 ok 3.0 min   (elapsed 237 min)
+14266.5s	344	[51/66] sanity_shuffled_cnn_gru_full_f0 ok 2.9 min   (elapsed 237 min)
+14283.8s	345	[52/66] sanity_shuffled_cnn_gru_full_f1 ok 2.8 min   (elapsed 237 min)
+14389.8s	346	[53/66] sanity_shuffled_cnn_gru_full_f2 ok 2.6 min   (elapsed 239 min)
+14391.6s	347	[54/66] sanity_shuffled_cnn_gru_imu_f0 ok 1.8 min   (elapsed 239 min)
+14418.0s	348	[55/66] sanity_shuffled_cnn_gru_full_f4 ok 2.5 min   (elapsed 239 min)
+14428.8s	349	[56/66] sanity_shuffled_cnn_gru_full_f3 ok 2.7 min   (elapsed 240 min)
+14504.1s	350	[57/66] sanity_shuffled_cnn_gru_imu_f1 ok 1.9 min   (elapsed 241 min)
+14505.5s	351	[58/66] sanity_shuffled_cnn_gru_imu_f2 ok 1.9 min   (elapsed 241 min)
+14520.7s	352	[59/66] sanity_shuffled_cnn_gru_imu_f3 ok 1.7 min   (elapsed 241 min)
+14523.8s	353	[60/66] sanity_shuffled_cnn_gru_imu_f4 ok 1.6 min   (elapsed 241 min)
+15543.4s	354	[61/66] lgbm_tuned ok 49.9 min   (elapsed 258 min)
+16649.4s	355	[62/66] lgbm ok 18.4 min   (elapsed 277 min)
+16656.8s	356	[63/66] xgb FAILED (see runs/logs/xgb.log) 0.1 min   (elapsed 277 min)
+16989.9s	357	[64/66] rf ok 5.6 min   (elapsed 282 min)
+17213.8s	358	[65/66] mlp ok 3.7 min   (elapsed 286 min)
+18682.0s	359	[66/66] sanity_shuffled_lgbm ok 24.5 min   (elapsed 310 min)
+18682.1s	360	
+18682.1s	361	--- model comparison
+18772.2s	362	              model   full    imu       combined [95% CI]  fold0
+18772.2s	363	      cnn_gru_tuned 0.8445 0.7777 0.8113 [0.7975, 0.8238] 0.8482
+18772.2s	364	         lgbm_tuned 0.8061 0.7346 0.7705 [0.7582, 0.7830] 0.8108
+18772.2s	365	            cnn_gru 0.8424 0.7676 0.8050 [0.7906, 0.8180] 0.8327
+18772.2s	366	                cnn 0.8292 0.7732 0.8012 [0.7866, 0.8154] 0.8303
+18772.2s	367	                gru 0.8364 0.7735 0.8051 [0.7889, 0.8200] 0.8462
+18772.2s	368	        transformer 0.8380 0.7624 0.8005 [0.7848, 0.8150] 0.8371
+18772.2s	369	               lgbm 0.8018 0.7361 0.7690 [0.7565, 0.7807] 0.8076
+18772.2s	370	                 rf 0.7737 0.7048 0.7401 [0.7250, 0.7547] 0.7846
+18772.2s	371	                mlp 0.7912 0.7201 0.7559 [0.7425, 0.7678] 0.7890
+18772.2s	372	cnn_gru_tuned:blank 0.8445 0.7656 0.8052 [0.7917, 0.8179] 0.8438
+18772.8s	373	
+18772.8s	374	--- is cnn_gru_tuned better than each other model? (Holm-corrected)
+18932.9s	375	                 comparison  delta     lo     hi     p folds_won  p_holm  significant
+18932.9s	376	 cnn_gru_tuned - lgbm_tuned 0.0408 0.0325 0.0487 0.000       5/5   0.000         True
+18932.9s	377	    cnn_gru_tuned - cnn_gru 0.0062 0.0022 0.0100 0.002       4/5   0.004         True
+18932.9s	378	        cnn_gru_tuned - cnn 0.0101 0.0046 0.0151 0.001       4/5   0.003         True
+18932.9s	379	        cnn_gru_tuned - gru 0.0062 0.0014 0.0113 0.012       5/5   0.012         True
+18932.9s	380	cnn_gru_tuned - transformer 0.0108 0.0055 0.0159 0.000       5/5   0.000         True
+18932.9s	381	       cnn_gru_tuned - lgbm 0.0423 0.0333 0.0507 0.000       5/5   0.000         True
+18932.9s	382	         cnn_gru_tuned - rf 0.0712 0.0610 0.0808 0.000       5/5   0.000         True
+18932.9s	383	        cnn_gru_tuned - mlp 0.0554 0.0473 0.0635 0.000       5/5   0.000         True
+18933.5s	384	
+18933.5s	385	--- does tuning help? (fold0 = untouched by tuning)
+18970.7s	386	        model   full    imu       combined [95% CI]  fold0
+18970.7s	387	      cnn_gru 0.8424 0.7676 0.8050 [0.7906, 0.8180] 0.8327
+18970.7s	388	cnn_gru_tuned 0.8445 0.7777 0.8113 [0.7975, 0.8238] 0.8482
+18970.7s	389	         lgbm 0.8018 0.7361 0.7690 [0.7565, 0.7807] 0.8076
+18970.7s	390	   lgbm_tuned 0.8061 0.7346 0.7705 [0.7582, 0.7830] 0.8108
+18971.3s	391	
+18971.3s	392	--- hybrids (deployed pair)
+18984.7s	393	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+18984.7s	394	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+18984.7s	395	
+18984.7s	396	Increase the number of iterations (max_iter) or scale the data as shown in:
+18984.7s	397	    https://scikit-learn.org/stable/modules/preprocessing.html
+18984.7s	398	Please also refer to the documentation for alternative solver options:
+18984.7s	399	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+18984.7s	400	  n_iter_i = _check_optimize_result(
+19042.6s	401	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+19042.6s	402	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+19042.6s	403	
+19042.6s	404	Increase the number of iterations (max_iter) or scale the data as shown in:
+19042.6s	405	    https://scikit-learn.org/stable/modules/preprocessing.html
+19042.6s	406	Please also refer to the documentation for alternative solver options:
+19042.6s	407	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+19042.6s	408	  n_iter_i = _check_optimize_result(
+19099.8s	409	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+19099.8s	410	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+19099.8s	411	
+19099.8s	412	Increase the number of iterations (max_iter) or scale the data as shown in:
+19099.8s	413	    https://scikit-learn.org/stable/modules/preprocessing.html
+19099.8s	414	Please also refer to the documentation for alternative solver options:
+19099.8s	415	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+19099.8s	416	  n_iter_i = _check_optimize_result(
+19149.9s	417	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+19149.9s	418	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+19149.9s	419	
+19149.9s	420	Increase the number of iterations (max_iter) or scale the data as shown in:
+19149.9s	421	    https://scikit-learn.org/stable/modules/preprocessing.html
+19149.9s	422	Please also refer to the documentation for alternative solver options:
+19149.9s	423	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+19149.9s	424	  n_iter_i = _check_optimize_result(
+19207.5s	425	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+19207.5s	426	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+19207.5s	427	
+19207.5s	428	Increase the number of iterations (max_iter) or scale the data as shown in:
+19207.5s	429	    https://scikit-learn.org/stable/modules/preprocessing.html
+19207.5s	430	Please also refer to the documentation for alternative solver options:
+19207.5s	431	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+19207.5s	432	  n_iter_i = _check_optimize_result(
+19264.5s	433	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+19264.5s	434	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+19264.5s	435	
+19264.5s	436	Increase the number of iterations (max_iter) or scale the data as shown in:
+19264.5s	437	    https://scikit-learn.org/stable/modules/preprocessing.html
+19264.5s	438	Please also refer to the documentation for alternative solver options:
+19264.5s	439	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+19264.5s	440	  n_iter_i = _check_optimize_result(
+19287.1s	441	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+19287.1s	442	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+19287.1s	443	
+19287.1s	444	Increase the number of iterations (max_iter) or scale the data as shown in:
+19287.1s	445	    https://scikit-learn.org/stable/modules/preprocessing.html
+19287.1s	446	Please also refer to the documentation for alternative solver options:
+19287.1s	447	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+19287.1s	448	  n_iter_i = _check_optimize_result(
+19309.8s	449	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+19309.8s	450	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+19309.8s	451	
+19309.8s	452	Increase the number of iterations (max_iter) or scale the data as shown in:
+19309.8s	453	    https://scikit-learn.org/stable/modules/preprocessing.html
+19309.8s	454	Please also refer to the documentation for alternative solver options:
+19309.8s	455	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+19309.8s	456	  n_iter_i = _check_optimize_result(
+19332.7s	457	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+19332.7s	458	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+19332.7s	459	
+19332.7s	460	Increase the number of iterations (max_iter) or scale the data as shown in:
+19332.7s	461	    https://scikit-learn.org/stable/modules/preprocessing.html
+19332.7s	462	Please also refer to the documentation for alternative solver options:
+19332.7s	463	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+19332.7s	464	  n_iter_i = _check_optimize_result(
+19355.6s	465	/usr/local/lib/python3.13/dist-packages/sklearn/linear_model/_logistic.py:465: ConvergenceWarning: lbfgs failed to converge (status=1):
+19355.6s	466	STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT.
+19355.6s	467	
+19355.6s	468	Increase the number of iterations (max_iter) or scale the data as shown in:
+19355.6s	469	    https://scikit-learn.org/stable/modules/preprocessing.html
+19355.6s	470	Please also refer to the documentation for alternative solver options:
+19355.6s	471	    https://scikit-learn.org/stable/modules/linear_model.html#logistic-regression
+19355.6s	472	  n_iter_i = _check_optimize_result(
+19412.4s	473	deployed blend: weight on cnn_gru_tuned = 0.55 (all sensors), 0.55 (motion-only)
+19412.4s	474	                      model   full    imu       combined [95% CI]  fold0
+19412.4s	475	              cnn_gru_tuned 0.8445 0.7777 0.8113 [0.7975, 0.8238] 0.8482
+19412.4s	476	                 lgbm_tuned 0.8061 0.7346 0.7705 [0.7582, 0.7830] 0.8108
+19412.4s	477	h1_cnn_gru_tuned_lgbm_tuned 0.8528 0.7887 0.8210 [0.8082, 0.8336] 0.8573
+19412.4s	478	h2_cnn_gru_tuned_lgbm_tuned 0.8457 0.7827 0.8143 [0.8013, 0.8269] 0.8538
+19412.4s	479	h3_cnn_gru_tuned_lgbm_tuned 0.8414 0.7813 0.8113 [0.7983, 0.8237] 0.8453
+19412.4s	480	complementarity (all sensors): exactly one of cnn_gru_tuned/lgbm_tuned is right on 22.4% of recordings, both wrong on 16.9%
+19413.2s	481	
+19413.2s	482	--- error analysis of the main model
+19417.6s	483	                           full    imu  imu_drop
+19417.6s	484	Above ear - pull hair     0.752  0.568     0.184
+19417.6s	485	Forehead - pull hairline  0.743  0.575     0.168
+19417.6s	486	Forehead - scratch        0.789  0.733     0.056
+19417.6s	487	Eyebrow - pull hair       0.500  0.365     0.136
+19417.6s	488	Eyelash - pull hair       0.577  0.540     0.037
+19417.6s	489	Neck - pinch skin         0.642  0.461     0.181
+19417.6s	490	Neck - scratch            0.695  0.555     0.140
+19417.6s	491	Cheek - pinch skin        0.633  0.430     0.203
+19417.6s	492	non_target                0.980  0.965     0.015
+19417.6s	493	worst 5 people: [['SUBJ_019262', 0.571], ['SUBJ_028998', 0.619], ['SUBJ_045235', 0.621], ['SUBJ_017170', 0.646], ['SUBJ_011323', 0.709]]
+19417.6s	494	saved to results/analysis_cnn_gru_tuned/
+19418.3s	495	
+19418.3s	496	--- sanity check: shuffled labels must score near chance
+19438.0s	497	                  model   full    imu       combined [95% CI]  fold0
+19438.0s	498	sanity_shuffled_cnn_gru 0.3936 0.4063 0.4000 [0.3928, 0.4068] 0.4223
+19438.0s	499	   sanity_shuffled_lgbm 0.4103 0.4060 0.4082 [0.4026, 0.4140] 0.4027
+19474.6s	500	
+19474.6s	501	finished in 324 min. Saved: cmi_models.zip, cmi_results.zip, runs/, results/
+19474.6s	502	FAILED: xgb
+19479.1s	503	/usr/local/lib/python3.13/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\|'
+19479.1s	504	  cells[i][c] = re.sub('\\\\\|', '|', cell)
+19479.3s	505	/usr/local/lib/python3.13/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\_'
+19479.3s	506	  text = re.sub(r'_', '\_', text) # Escape underscores in display text
+19480.3s	507	[NbConvertApp] Converting notebook __notebook__.ipynb to notebook
+19480.4s	508	[NbConvertApp] Writing 25986 bytes to __notebook__.ipynb
+19483.2s	509	[NbConvertApp] Converting notebook __notebook__.ipynb to html
+19483.8s	510	[NbConvertApp] Writing 296043 bytes to __results__.html

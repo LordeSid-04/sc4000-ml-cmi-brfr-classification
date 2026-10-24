@@ -1,0 +1,26 @@
+{
+  "passed": true,
+  "minutes": 4.6,
+  "stages": [
+    {
+      "stage": "unit tests",
+      "pass": true,
+      "seconds": 21
+    },
+    {
+      "stage": "build dataset",
+      "pass": true,
+      "seconds": 191
+    },
+    {
+      "stage": "parity check",
+      "pass": true,
+      "seconds": 34
+    },
+    {
+      "stage": "quality checks",
+      "pass": true,
+      "seconds": 3
+    }
+  ]
+}

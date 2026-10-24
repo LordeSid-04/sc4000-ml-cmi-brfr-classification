@@ -1,0 +1,10 @@
+,full,imu,imu_drop
+Above ear - pull hair,0.7518,0.5676,0.1843
+Forehead - pull hairline,0.7429,0.575,0.1678
+Forehead - scratch,0.7893,0.733,0.0562
+Eyebrow - pull hair,0.5004,0.3648,0.1356
+Eyelash - pull hair,0.5767,0.5397,0.037
+Neck - pinch skin,0.6422,0.4613,0.1809
+Neck - scratch,0.6953,0.5549,0.1404
+Cheek - pinch skin,0.633,0.4296,0.2034
+non_target,0.9797,0.9648,0.0149
