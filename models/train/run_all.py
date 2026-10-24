@@ -166,6 +166,10 @@ def main():
             ev('does tuning help? (fold0 = untouched by tuning)', 'table', 'cnn_gru', nn, 'lgbm', gb)
         if {nn, gb} <= set(base):
             ev('hybrids (deployed pair)', 'hybrid', nn, gb)
+            h = [f'{x}_{nn}_{gb}' for x in ('h1', 'h2', 'h3')]
+            ev('do the hybrids beat the network alone? (Holm-corrected)', 'compare', h[0], nn, *h[1:])
+        if complete(nn, ('full', 'blank')):
+            ev('routing: dedicated motion-only model vs the all-sensor model with sensors off', 'compare', nn, f'{nn}:blank')
             ev('error analysis of the main model', 'analysis', nn)
         abl = [n for n in ABLATIONS if complete(n)]
         if abl and complete('cnn_gru'):

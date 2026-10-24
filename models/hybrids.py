@@ -6,6 +6,8 @@ then applied to the held-out fold, so their reported scores stay honest.
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from models.common import score
 
@@ -26,7 +28,8 @@ def fit_predict(y, fold, pa, pb, X):
         tr, va = fold != k, fold == k
         w = best_weight(y[tr], pa[tr], pb[tr])
         out['h1'][va] = w * pa[va] + (1 - w) * pb[va]
-        out['h2'][va] = LogisticRegression(C=1.0, max_iter=500).fit(logp[tr], y[tr]).predict_proba(logp[va])
+        out['h2'][va] = make_pipeline(StandardScaler(), LogisticRegression(C=1.0, max_iter=3000)) \
+            .fit(logp[tr], y[tr]).predict_proba(logp[va])
         m = lgb.LGBMClassifier(n_estimators=200, learning_rate=0.05, num_leaves=15, colsample_bytree=0.3,
                                subsample=0.8, subsample_freq=1, verbose=-1).fit(F[tr], y[tr])
         out['h3'][va] = m.predict_proba(F[va])
