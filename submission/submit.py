@@ -1,6 +1,8 @@
 """Kaggle inference notebook (internet off). Attach two private datasets:
-  cmi-code   = this repo (preprocessing/, models/, data/processed/{meta.json,scalers/,tree_full.parquet})
-  cmi-models = the unzipped cmi_models.zip (runs/: checkpoints, fitted trees, blend_weights.json at its root)
+  cmi-code   = this repo (the code: preprocessing/, models/)
+  cmi-models = the unzipped cmi_models.zip: checkpoints, fitted trees, blend_weights.json, deploy.json and processed/
+               (the exact meta.json, scalers and tree-column order the models were trained with)
+Set CMI_CODE / CMI_RUNS below if the datasets unzip into a sub-folder (check with !ls /kaggle/input/...).
 Every recording is routed by its sensors: no thermopile AND no ToF -> motion-only models, else all-sensor models.
 Prediction = w * mean(NN folds x seeds) + (1 - w) * mean(tree folds x seeds); the pair and w come from
 `python -m models.evaluate hybrid <nn> <gb>` (runs/deploy.json, runs/blend_weights.json)."""
@@ -24,12 +26,14 @@ from preprocessing.pipeline import preprocess                          # noqa: E
 from preprocessing.step5_shaping import Scaler, fixed_length, tree_summary   # noqa: E402
 
 torch.set_num_threads(4)
-meta = json.load(open(f'{CODE}/data/processed/meta.json'))
+P = f'{RUNS}/processed' if os.path.isdir(f'{RUNS}/processed') else f'{CODE}/data/processed'   # bundled by run_all
+meta = json.load(open(f'{P}/meta.json'))
 L = meta['fixed_length']
 W = json.load(open(f'{RUNS}/blend_weights.json'))
 NN, GB = json.load(open(f'{RUNS}/deploy.json')).values()      # written by `evaluate hybrid <nn> <gb>`
-SC = {k: Scaler.load(f'{CODE}/data/processed/scalers/fold{k}.json') for k in range(5)}
-TREE_COLS = [c for c in pq.read_schema(f'{CODE}/data/processed/tree_full.parquet').names if c != 'sequence_id']
+SC = {k: Scaler.load(f'{P}/scalers/fold{k}.json') for k in range(5)}
+TREE_COLS = json.load(open(f'{P}/tree_columns.json')) if os.path.exists(f'{P}/tree_columns.json') else \
+    [c for c in pq.read_schema(f'{P}/tree_full.parquet').names if c != 'sequence_id']
 GBS = [joblib.load(f) for f in sorted(glob.glob(f'{RUNS}/{GB}/model_s*_f*.joblib'))]
 NETS = {}
 for v in ('full', 'imu'):

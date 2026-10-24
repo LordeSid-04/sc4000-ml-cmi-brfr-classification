@@ -64,6 +64,19 @@ def plan(a):
     return gpu, cpu, (nn, gb)
 
 
+def bundle(d):
+    """Ship the exact metadata, scalers and tree-column order this run trained with, next to the models,
+    so the submission can never pair the models with a differently built copy."""
+    import json
+    import pyarrow.parquet as pq
+    out = Path('runs/processed')
+    out.mkdir(parents=True, exist_ok=True)
+    shutil.copy(d / 'meta.json', out / 'meta.json')
+    shutil.copytree(d / 'scalers', out / 'scalers', dirs_exist_ok=True)
+    cols = [c for c in pq.read_schema(d / 'tree_full.parquet').names if c != 'sequence_id']
+    (out / 'tree_columns.json').write_text(json.dumps(cols))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--data-zip', help='competition zip/folder: builds data/processed first (skipped if already built)')
@@ -161,6 +174,7 @@ def main():
         if sanity:
             ev('sanity check: shuffled labels must score near chance', 'table', *sanity)
 
+    bundle(d)
     shutil.make_archive('cmi_models', 'zip', 'runs')              # checkpoints + OOF + blend_weights.json + deploy.json
     if Path('results').exists():
         shutil.make_archive('cmi_results', 'zip', 'results')
