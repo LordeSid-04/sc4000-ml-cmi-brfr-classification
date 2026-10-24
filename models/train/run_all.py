@@ -1,23 +1,28 @@
 """Run the complete training pipeline for every model, in parallel, then evaluate and package the results.
 
-  python -m models.train.run_all [--data-zip PATH] [--tune] [--ablations] [--sanity] [--seeds 0 1 2] [--workers 3]
+  python -m models.train.run_all [--data-zip PATH] [--tune] [--ablations] [--sanity] [--n1] [--seeds 0 1 2] [--workers 4]
 
  1. (optional) --data-zip: build data/processed from the competition data (python run_pipeline.py)
  2. pre-compute augmented copies of the training recordings (once, all CPU cores)
- 3. (--tune) nested tuning of the deployed pair: cnn_gru on the GPU and lgbm on the CPU at the same time
- 4. network jobs (cnn_gru, cnn, gru, transformer [+ cnn_gru_tuned, ablations, sanity] x {all-sensor, motion-only} x
-    5 folds) run --workers at a time on the GPU(s) while the summary-feature models train on the CPU
- 5. evaluation: results table with CIs, Holm-corrected comparisons, hybrids + blend weights, error analysis
- 6. runs/ and results/ are zipped: cmi_models.zip is what the submission notebook needs
-Safe to re-run after a crash or timeout: finished (model, fold, seed) runs and finished tuning are skipped."""
+ 3. (--tune) nested tuning of the deployed pair: cnn_gru on a GPU and lgbm on the CPU at the same time
+ 4. (--n1) build data/processed_mirror (left-handed wearers mirrored into the right-hand frame) + its copies
+ 5. network jobs (+ xgboost) run --workers at a time on the GPU(s); the other summary-feature models use the CPU
+ 6. evaluation (old result files are cleared first): tables with CIs, Holm-corrected comparisons, hybrids,
+    blend weights, error analysis; results/run_info.json records versions, hardware and settings
+ 7. runs/ and results/ are zipped: cmi_models.zip is what the submission notebook needs
+Safe to re-run after a crash or timeout: finished (model, fold, seed) runs, tuning and data builds are skipped."""
 import argparse
+import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
+
+import pandas as pd
 
 from models.common import complete
 
@@ -27,6 +32,7 @@ TREES = ['lgbm', 'xgb', 'rf', 'mlp']
 ABLATIONS = {'abl_noaug': ['--aug', '0'], 'abl_nophase': ['--phase', '0'],
              'abl_notofreg': ['--drop-sub', '_r0', '_r1', '_r2']}         # each removes one part of the main model
 PARAMS = Path('results/params')
+D, MIRROR = Path('data/processed'), Path('data/processed_mirror')
 
 
 def sh(cmd, log=None, env=None):
@@ -41,81 +47,119 @@ def sh(cmd, log=None, env=None):
 
 
 def plan(a):
-    """-> (network jobs, tree jobs, deployed (nn, gb) names). A job = (name, command)."""
+    """-> (GPU jobs, CPU jobs, deployed (nn, gb) names). A job = (name, command)."""
     only = lambda n: not a.only or n in a.only
     s = ['--seeds', *map(str, a.seeds)]
+    ep = ['--epochs', str(a.epochs)] if a.epochs else []
     nn, gb = ('cnn_gru_tuned', 'lgbm_tuned') if a.tune else ('cnn_gru', 'lgbm')
+    tuned = ['--params', str(PARAMS / 'cnn_gru.json')] if a.tune else []
     nets = [(n, n, []) for n in NETS if only(n)]
     trees = [(m, m, []) for m in TREES if only(m)]
     if a.tune:
-        nets.insert(0, ('cnn_gru_tuned', 'cnn_gru', ['--params', str(PARAMS / 'cnn_gru.json')]))
+        nets.insert(0, ('cnn_gru_tuned', 'cnn_gru', tuned))
         trees.insert(0, ('lgbm_tuned', 'lgbm', ['--params', str(PARAMS / 'lgbm.json')]))
+    if a.n1:          # same model and settings as the deployed network, mirrored data: isolates the effect of N1
+        nets.append(('n1_mirror', 'cnn_gru', [*tuned, '--data', str(MIRROR)]))
     if a.ablations:
         nets += [(n, 'cnn_gru', x) for n, x in ABLATIONS.items()]
     if a.sanity:      # permuted labels: scores must collapse to chance, otherwise something leaks
         nets.append(('sanity_shuffled_cnn_gru', 'cnn_gru', ['--shuffle-labels', '--seeds', '0']))
         trees.append(('sanity_shuffled_lgbm', 'lgbm', ['--shuffle-labels', '--seeds', '0']))
     gpu = [(f'{name}_{v}_f{k}', [PY, '-m', f'models.train.{core}', '--name', name, '--variant', v, '--folds', str(k),
-                                 *s, *(['--epochs', str(a.epochs)] if a.epochs else []), *extra,
-                                 *(['--save'] if name == nn else [])])
+                                 *s, *ep, *extra, *(['--save'] if name == nn else [])])
            for name, core, extra in nets for v in ('full', 'imu') for k in range(5)]
-    cpu = [(name, [PY, '-m', f'models.train.{core}', '--name', name, *s, '--trees', str(a.trees), *extra,
-                   *(['--save'] if name == gb else [])]) for name, core, extra in trees]
+    cpu = []
+    for name, core, extra in trees:
+        cmd = [PY, '-m', f'models.train.{core}', '--name', name, *s, '--trees', str(a.trees), *extra,
+               *(['--save'] if name == gb else [])]
+        (gpu if core == 'xgb' and a.n_gpu else cpu).append((name, cmd))    # xgboost is much faster on a GPU
     return gpu, cpu, (nn, gb)
 
 
-def bundle(d):
+def bundle():
     """Ship the exact metadata, scalers and tree-column order this run trained with, next to the models,
     so the submission can never pair the models with a differently built copy."""
-    import json
     import pyarrow.parquet as pq
     out = Path('runs/processed')
     out.mkdir(parents=True, exist_ok=True)
-    shutil.copy(d / 'meta.json', out / 'meta.json')
-    shutil.copytree(d / 'scalers', out / 'scalers', dirs_exist_ok=True)
-    cols = [c for c in pq.read_schema(d / 'tree_full.parquet').names if c != 'sequence_id']
+    shutil.copy(D / 'meta.json', out / 'meta.json')
+    shutil.copytree(D / 'scalers', out / 'scalers', dirs_exist_ok=True)
+    pd.read_csv(D / 'sequences.csv')[['sequence_id', 'subject', 'fold']].to_csv(out / 'folds_used.csv', index=False)
+    cols = [c for c in pq.read_schema(D / 'tree_full.parquet').names if c != 'sequence_id']
     (out / 'tree_columns.json').write_text(json.dumps(cols))
+
+
+def clear_results():
+    """Remove result files from earlier runs (they are regenerated below); keep tuning settings and archives."""
+    r = Path('results')
+    for p in list(r.glob('*')) if r.exists() else []:
+        if p.is_file() and p.name not in ('.gitkeep', 'run_info.json', 'folds_used.csv'):
+            p.unlink()
+        elif p.is_dir() and p.name.startswith('analysis_'):
+            shutil.rmtree(p)
+
+
+def run_info(a, t0, failed, nn, gb):
+    import importlib.metadata as md
+    import torch
+    vers = {}
+    for p in ('torch', 'lightgbm', 'xgboost', 'scikit-learn', 'optuna', 'numpy', 'pandas'):
+        try:
+            vers[p] = md.version(p)
+        except md.PackageNotFoundError:
+            vers[p] = None
+    info = dict(finished=time.strftime('%Y-%m-%d %H:%M:%S %Z'), minutes=round((time.time() - t0) / 60, 1),
+                args=vars(a), deployed={'nn': nn, 'gb': gb}, failed=failed, python=platform.python_version(),
+                gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())], packages=vers,
+                complete_runs=sorted(p.name for p in Path('runs').iterdir()
+                                     if p.is_dir() and p.name not in ('logs', 'processed') and complete(p.name)))
+    Path('results').mkdir(exist_ok=True)
+    if (D / 'sequences.csv').exists():          # the exact person -> fold split behind every number
+        pd.read_csv(D / 'sequences.csv')[['sequence_id', 'subject', 'fold']].to_csv('results/folds_used.csv', index=False)
+    Path('results/run_info.json').write_text(json.dumps(info, indent=2, default=str))
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--data-zip', help='competition zip/folder: builds data/processed first (skipped if already built)')
     ap.add_argument('--seeds', type=int, nargs='+', default=[0, 1, 2])
-    ap.add_argument('--workers', type=int, default=3, help='network jobs running at once (total, shared over GPUs)')
+    ap.add_argument('--workers', type=int, default=3, help='GPU jobs running at once (total, shared over GPUs)')
     ap.add_argument('--epochs', type=int, default=None, help='override the epoch count of every network (testing)')
     ap.add_argument('--trees', type=int, default=500)
     ap.add_argument('--aug-copies', type=int, default=6)
     ap.add_argument('--only', nargs='*', help='train only these base models (e.g. cnn_gru lgbm)')
     ap.add_argument('--tune', action='store_true', help='nested tuning of cnn_gru + lgbm, then train and deploy them')
     ap.add_argument('--trials', type=int, nargs=2, default=[12, 20], metavar=('NN', 'TREES'))
+    ap.add_argument('--n1', action='store_true', help='N1 experiment: the deployed network on left-hand-mirrored data')
     ap.add_argument('--ablations', action='store_true', help='also run the main-model ablations')
     ap.add_argument('--sanity', action='store_true', help='also run the shuffled-label leakage check')
     ap.add_argument('--no-eval', action='store_true')
     a = ap.parse_args()
-    d = Path('data/processed')
     t0, failed = time.time(), []
 
-    if not (d / 'features.npz').exists() or not (d / 'canonical' / 'offsets.npy').exists():
+    if not (D / 'features.npz').exists() or not (D / 'canonical' / 'offsets.npy').exists():
         if not a.data_zip:
             sys.exit('data/processed/features.npz or canonical/ missing: rerun with --data-zip <competition zip or folder>')
         print('building the dataset (about 5 minutes) ...', flush=True)
         if sh([PY, 'run_pipeline.py', '--data', a.data_zip])[0]:
             sys.exit('run_pipeline.py failed')
-    if a.aug_copies and not (d / 'aug_x.npy').exists():
+    if a.aug_copies and not (D / 'aug_x.npy').exists():
         print('pre-computing augmented copies ...', flush=True)
         if sh([PY, '-m', 'models.train.augment', '--copies', str(a.aug_copies)])[0]:
             sys.exit('augmentation failed')
 
     import torch
-    n_gpu = torch.cuda.device_count()
+    a.n_gpu = n_gpu = torch.cuda.device_count()
 
-    def env(i, use_gpu):
-        """Spread network jobs over the GPUs; hide the GPU from tree jobs so the networks keep it."""
+    def env(i, use_gpu, xgb=False):
+        """Spread GPU jobs over the GPUs; hide the GPU from CPU jobs so the networks keep it."""
         e = dict(os.environ)
         if not use_gpu:
             e['CUDA_VISIBLE_DEVICES'] = ''
+            e['CMI_XGB_DEVICE'] = 'cpu'
         elif n_gpu:
             e['CUDA_VISIBLE_DEVICES'] = str(i % n_gpu)
+            e['CMI_XGB_DEVICE'] = 'cuda' if xgb else 'cpu'
         return e
 
     if a.tune:
@@ -123,22 +167,41 @@ def main():
                 if not (PARAMS / f'{m}.json').exists()]
         if todo:
             print('tuning ' + ', '.join(f'{m} ({n} trials)' for m, n, _ in todo) + ' in parallel ...', flush=True)
+            cmd = lambda m, n: [PY, '-m', 'models.train.tune', '--model', m, '--trials', str(n),
+                                *(['--epochs', str(a.epochs)] if a.epochs else [])]
             with ThreadPoolExecutor(2) as ex:
-                cmd = lambda m, n: [PY, '-m', 'models.train.tune', '--model', m, '--trials', str(n),
-                                    *(['--epochs', str(a.epochs)] if a.epochs else [])]
                 res = list(ex.map(lambda j: (j[0], *sh(cmd(j[0], j[1]), f'runs/logs/tune_{j[0]}.log', env(0, j[2]))),
                                   todo))
             for m, rc, secs in res:
                 print(f'tune {m}: {"ok" if rc == 0 else "FAILED (runs/logs/tune_" + m + ".log)"} {secs / 60:.0f} min')
                 if rc:
                     sys.exit('tuning failed')
+        else:
+            print('tuning: reusing results/params/cnn_gru.json and lgbm.json', flush=True)
+
+    if a.n1:
+        if not (MIRROR / 'features.npz').exists() or not (MIRROR / 'canonical' / 'offsets.npy').exists():
+            src = a.data_zip or '/kaggle/input'
+            print('N1: building the left-hand-mirrored dataset ...', flush=True)
+            if sh([PY, 'scripts/01_build_dataset.py', '--out', str(MIRROR), '--mirror-left',
+                   '--folds-from', str(D / 'sequences.csv'),
+                   *(['--data', a.data_zip] if a.data_zip else [])], 'runs/logs/build_mirror.log')[0]:
+                sys.exit(f'mirrored build failed (runs/logs/build_mirror.log); pass --data-zip <competition folder> '
+                         f'(tried {src})')
+        s0, s1 = pd.read_csv(D / 'sequences.csv'), pd.read_csv(MIRROR / 'sequences.csv')
+        if not (s0[['sequence_id', 'fold', 'gesture_id']].equals(s1[['sequence_id', 'fold', 'gesture_id']])):
+            sys.exit('mirrored dataset has a different recording order or folds: comparison would be invalid')
+        if a.aug_copies and not (MIRROR / 'aug_x.npy').exists():
+            if sh([PY, '-m', 'models.train.augment', '--data', str(MIRROR), '--copies', str(a.aug_copies)],
+                  'runs/logs/augment_mirror.log')[0]:
+                sys.exit('mirrored augmentation failed')
 
     gpu_jobs, cpu_jobs, (nn, gb) = plan(a)
-    print(f'{len(gpu_jobs)} network jobs ({a.workers} at a time, {n_gpu} GPU(s)) + {len(cpu_jobs)} tree models '
-          f'on the CPU, seeds {a.seeds}; deploying {nn} + {gb}', flush=True)
+    print(f'{len(gpu_jobs)} GPU jobs ({a.workers} at a time, {n_gpu} GPU(s)) + {len(cpu_jobs)} CPU tree models, '
+          f'seeds {a.seeds}; deploying {nn} + {gb}', flush=True)
 
     def run(i, name, cmd, use_gpu):
-        return name, *sh(cmd, f'runs/logs/{name}.log', env(i, use_gpu))
+        return name, *sh(cmd, f'runs/logs/{name}.log', env(i, use_gpu, xgb='models.train.xgb' in cmd))
 
     with ThreadPoolExecutor(a.workers) as gp, ThreadPoolExecutor(1) as cp:
         futs = [gp.submit(run, i, n, c, True) for i, (n, c) in enumerate(gpu_jobs)] + \
@@ -151,37 +214,51 @@ def main():
                 failed.append(name)
 
     if not a.no_eval:
+        clear_results()
+
         def ev(title, *args):
             print(f'\n--- {title}', flush=True)
             if subprocess.run([PY, '-m', 'models.evaluate', *args]).returncode:
                 failed.append(title)
 
-        base = [n for n in [nn, gb, *NETS, *TREES] if complete(n)]
-        base = list(dict.fromkeys(base))
+        base = list(dict.fromkeys(n for n in [nn, gb, *NETS, *TREES] if complete(n)))
         if base:
-            ev('model comparison', 'table', *base, *([f'{nn}:blank'] if complete(nn, ('full', 'blank')) else []))
+            ev('model comparison', 'table', *base, *([f'{nn}:blank'] if complete(nn, ('full', 'blank')) else []),
+               '--tag', 'main')
         if nn in base and len(base) > 1:
-            ev(f'is {nn} better than each other model? (Holm-corrected)', 'compare', nn, *[b for b in base if b != nn])
-        if a.tune and complete('cnn_gru') and complete('lgbm'):
-            ev('does tuning help? (fold0 = untouched by tuning)', 'table', 'cnn_gru', nn, 'lgbm', gb)
+            ev(f'is {nn} better than each other model? (Holm-corrected)', 'compare', nn,
+               *[b for b in base if b != nn], '--tag', 'main')
+        if a.tune and all(complete(n) for n in ('cnn_gru', 'lgbm', nn, gb)):
+            ev('does tuning help? (fold0 = untouched by tuning)', 'table', 'cnn_gru', nn, 'lgbm', gb, '--tag', 'tuning')
+            ev('tuning, tested (Holm-corrected)', 'compare', nn, 'cnn_gru', '--tag', 'tuning_nn')
+            ev('tuning, tested (Holm-corrected)', 'compare', gb, 'lgbm', '--tag', 'tuning_gb')
         if {nn, gb} <= set(base):
             ev('hybrids (deployed pair)', 'hybrid', nn, gb)
             h = [f'{x}_{nn}_{gb}' for x in ('h1', 'h2', 'h3')]
-            ev('do the hybrids beat the network alone? (Holm-corrected)', 'compare', h[0], nn, *h[1:])
+            ev('do the hybrids beat the network alone? (Holm-corrected)', 'compare', h[0], nn, *h[1:], '--tag', 'hybrids')
+            for m in (nn, gb, h[0]):
+                ev(f'error analysis: {m}', 'analysis', m)
         if complete(nn, ('full', 'blank')):
-            ev('routing: dedicated motion-only model vs the all-sensor model with sensors off', 'compare', nn, f'{nn}:blank')
-            ev('error analysis of the main model', 'analysis', nn)
+            ev('routing: dedicated motion-only model vs the all-sensor model with sensors off', 'compare', nn,
+               f'{nn}:blank', '--tag', 'routing')
         abl = [n for n in ABLATIONS if complete(n)]
         if abl and complete('cnn_gru'):
-            ev('ablations: does each component help? (Holm-corrected)', 'compare', 'cnn_gru', *abl)
+            ev('ablations (each removes one component of the main model)', 'table', 'cnn_gru', *abl, '--tag', 'ablations')
+            ev('ablations, tested (Holm-corrected)', 'compare', 'cnn_gru', *abl, '--tag', 'ablations')
+        if complete('n1_mirror') and complete(nn):
+            ev('N1: mirroring left-handed wearers', 'table', nn, 'n1_mirror', '--tag', 'n1')
+            ev('N1, tested', 'compare', 'n1_mirror', nn, '--tag', 'n1')
+            ev('error analysis: n1_mirror', 'analysis', 'n1_mirror')
         sanity = [n for n in ('sanity_shuffled_cnn_gru', 'sanity_shuffled_lgbm') if complete(n)]
         if sanity:
-            ev('sanity check: shuffled labels must score near chance', 'table', *sanity)
+            ev('sanity check: shuffled labels must fall to chance (about 0.37-0.40 for this metric)', 'table',
+               *sanity, '--tag', 'sanity')
 
-    bundle(d)
+    if (D / 'meta.json').exists():
+        bundle()
+    run_info(a, t0, failed, nn, gb)
     shutil.make_archive('cmi_models', 'zip', 'runs')              # checkpoints + OOF + blend_weights.json + deploy.json
-    if Path('results').exists():
-        shutil.make_archive('cmi_results', 'zip', 'results')
+    shutil.make_archive('cmi_results', 'zip', 'results')
     print(f'\nfinished in {(time.time() - t0) / 60:.0f} min. Saved: cmi_models.zip, cmi_results.zip, runs/, results/')
     if failed:
         print('FAILED:', ', '.join(failed))

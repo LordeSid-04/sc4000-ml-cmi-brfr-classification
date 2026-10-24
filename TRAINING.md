@@ -15,10 +15,18 @@ models/
 submission/submit.py   the Kaggle inference notebook
 ```
 
+## Folds are pinned to a file
+
+`StratifiedGroupKFold` splits people differently in scikit-learn 1.7 and 1.8+, even with the same seed. Every run
+therefore records its split in `results/folds_used.csv`. Rebuilds that must be comparable pass
+`--folds-from <that file>` to `scripts/01_build_dataset.py`; `run_all --n1` does this automatically.
+
+**Never copy `data/` or `results/` from a fresh code download over a trained run:** they belong to that run.
+
 ## Run everything
 
 ```
-python -m models.train.run_all --data-zip <competition zip or folder> --tune --ablations --sanity
+python -m models.train.run_all --data-zip <competition zip or folder> --tune --ablations --sanity --n1
 ```
 
 Re-running the same command resumes: finished runs and finished tuning are skipped. A quick first pass:

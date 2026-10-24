@@ -1,6 +1,6 @@
 """Tables, statistics, hybrids and error analysis from the saved out-of-fold predictions (runs/<name>/).
 
-  python -m models.evaluate table rf lgbm xgb mlp cnn gru transformer cnn_gru 'cnn_gru:blank'
+  python -m models.evaluate table rf lgbm xgb mlp cnn gru transformer cnn_gru 'cnn_gru:blank' [--tag main]
   python -m models.evaluate compare cnn_gru lgbm xgb rf     # first model vs each other: paired bootstrap, Holm-corrected
   python -m models.evaluate hybrid cnn_gru lgbm             # h1/h2/h3 + runs/blend_weights.json for the submission
   python -m models.evaluate analysis cnn_gru                # per-class F1, confusion matrix, per-person, per-posture
@@ -45,7 +45,7 @@ def table(names, seqs, y, fold, subj, tag=None):
     return df
 
 
-def compare(ref, *others, seqs=None, y=None, fold=None, subj=None):
+def compare(ref, *others, seqs=None, y=None, fold=None, subj=None, tag=None):
     """Is `ref` better than each other model? Paired subject bootstrap; Holm correction over the comparisons."""
     preds = {n: get(n, fold) for n in (ref, *others)}
     bs = bootstrap(y, subj, preds, n=2000)
@@ -61,7 +61,7 @@ def compare(ref, *others, seqs=None, y=None, fold=None, subj=None):
     df['significant'] = df['p_holm'] < 0.05
     print(df.round(4).to_string(index=False), flush=True)
     R.mkdir(exist_ok=True)
-    df.round(5).to_csv(R / f'compare_{ref.replace(":", "-")}.csv', index=False)
+    df.round(5).to_csv(R / f'compare_{tag or ref.replace(":", "-")}.csv', index=False)
 
 
 def hybrid(a, b, seqs, y, fold, subj):
@@ -81,7 +81,7 @@ def hybrid(a, b, seqs, y, fold, subj):
         for k in range(5):
             for kind, s in (('full', 0), ('imu', 1)):
                 save_oof(n, kind, 0, k, outs[s][h][fold == k])
-    table([a, b] + names, seqs, y, fold, subj, tag=f'hybrids_{a}_{b}')
+    table([a, b] + names, seqs, y, fold, subj, tag='hybrids')
     ea, eb = A[0].argmax(1) == y, B[0].argmax(1) == y
     print(f'complementarity (all sensors): exactly one of {a}/{b} is right on {np.mean(ea != eb):.1%} of recordings, '
           f'both wrong on {np.mean(~ea & ~eb):.1%}')
@@ -135,10 +135,14 @@ def analysis(name, seqs, y, fold, subj):
 
 if __name__ == '__main__':
     cmd, args = sys.argv[1], sys.argv[2:]
+    tag = None
+    if '--tag' in args:                                         # --tag NAME -> results/table_NAME.csv etc.
+        i = args.index('--tag')
+        tag, args = args[i + 1], args[:i] + args[i + 2:]
     seqs, y, fold, subj = setup()
     if cmd == 'table':
-        table(args, seqs, y, fold, subj)
+        table(args, seqs, y, fold, subj, tag=tag)
     elif cmd == 'compare':
-        compare(*args, seqs=seqs, y=y, fold=fold, subj=subj)
+        compare(*args, seqs=seqs, y=y, fold=fold, subj=subj, tag=tag)
     else:
         {'hybrid': hybrid, 'analysis': analysis}[cmd](*args, seqs, y, fold, subj)

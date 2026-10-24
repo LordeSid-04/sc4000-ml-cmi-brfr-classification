@@ -38,6 +38,11 @@ def main():
     parser.add_argument('--out', default='data/processed')
     parser.add_argument('--length', type=int, default=0, help='fixed length L (0 = 95th percentile, rounded up to 8)')
     parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--folds-from', help='CSV with sequence_id + fold to reuse instead of re-splitting. Use it for '
+                        'every rebuild that must be comparable: StratifiedGroupKFold splits differ across scikit-learn '
+                        'versions (1.7 vs 1.8+), even with the same seed')
+    parser.add_argument('--mirror-left', action='store_true',
+                        help='mirror left-handed wearers into the right-hand frame (handedness is known at test time too)')
     args = parser.parse_args()
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -48,11 +53,16 @@ def main():
     train = train.sort_values(['sequence_id', 'sequence_counter'], kind='stable').reset_index(drop=True)
     print(f'loaded {train.shape} in {time.time() - t0:.0f}s', flush=True)
 
-    config = PipelineConfig()
+    config = PipelineConfig(mirror_left=args.mirror_left)
     result = process_training_set(train, demo, config, keep_canonical=True)
     del train
     seqs = result['sequences']
-    folds = make_folds(seqs, n_splits=5, seed=args.seed)
+    if args.folds_from:
+        folds = pd.read_csv(args.folds_from)[['sequence_id', 'fold']].merge(seqs[['sequence_id', 'subject']], on='sequence_id')
+        assert len(folds) == len(seqs), 'folds file does not cover every recording'
+        folds = folds[['sequence_id', 'subject', 'fold']]
+    else:
+        folds = make_folds(seqs, n_splits=5, seed=args.seed)
     seqs = seqs.merge(folds[['sequence_id', 'fold']], on='sequence_id')
     seqs['start_row'] = np.r_[0, np.cumsum(seqs['rows'].to_numpy())[:-1]]
     seqs.to_csv(out / 'sequences.csv', index=False)
