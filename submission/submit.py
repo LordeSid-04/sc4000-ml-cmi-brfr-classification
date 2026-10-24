@@ -2,7 +2,7 @@
   cmi-code   = this repo (the code: preprocessing/, models/)
   cmi-models = the unzipped cmi_models.zip: checkpoints, fitted trees, blend_weights.json, deploy.json and processed/
                (the exact meta.json, scalers and tree-column order the models were trained with)
-Set CMI_CODE / CMI_RUNS below if the datasets unzip into a sub-folder (check with !ls /kaggle/input/...).
+Both folders are found automatically under /kaggle/input (set CMI_CODE / CMI_RUNS to override).
 Every recording is routed by its sensors: no thermopile AND no ToF -> motion-only models, else all-sensor models.
 Prediction = w * mean(NN folds x seeds) + (1 - w) * mean(tree folds x seeds); the pair and w come from
 `python -m models.evaluate hybrid <nn> <gb>` (runs/deploy.json, runs/blend_weights.json)."""
@@ -17,8 +17,14 @@ import pandas as pd
 import pyarrow.parquet as pq
 import torch
 
-CODE = os.environ.get('CMI_CODE', '/kaggle/input/cmi-code')
-RUNS = os.environ.get('CMI_RUNS', '/kaggle/input/cmi-models')
+def find(name):
+    """Folder holding `name` anywhere under /kaggle/input (Kaggle's mount paths vary by account and notebook)."""
+    hits = sorted(glob.glob(f'/kaggle/input/**/{name}', recursive=True), key=len)
+    return os.path.dirname(hits[0]) if hits else None
+
+
+CODE = os.environ.get('CMI_CODE') or os.path.dirname(find('submission/submit.py') or '/kaggle/input/cmi-code/x')
+RUNS = os.environ.get('CMI_RUNS') or find('deploy.json') or '/kaggle/input/cmi-models'
 sys.path.insert(0, CODE)
 from models.registry import NETS as ARCH                               # noqa: E402
 from preprocessing.constants import GESTURES                           # noqa: E402
@@ -70,5 +76,5 @@ if server is not None:
     if os.getenv('KAGGLE_IS_COMPETITION_RERUN'):
         server.serve()
     else:
-        base = '/kaggle/input/cmi-detect-behavior-with-sensor-data'
+        base = find('test_demographics.csv')
         server.run_local_gateway(data_paths=(f'{base}/test.csv', f'{base}/test_demographics.csv'))
