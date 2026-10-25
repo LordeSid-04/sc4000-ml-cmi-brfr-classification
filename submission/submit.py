@@ -37,20 +37,29 @@ meta = json.load(open(f'{P}/meta.json'))
 L = meta['fixed_length']
 W = json.load(open(f'{RUNS}/blend_weights.json'))
 NN, GB = json.load(open(f'{RUNS}/deploy.json')).values()      # written by `evaluate hybrid <nn> <gb>`
+# Choose what to submit without re-uploading anything (set these in a cell BEFORE running this file):
+#   CMI_NN=<run name>  CMI_GB=<run name>  CMI_W=<weight on the network, e.g. 1 / 0 / 0.6 / "0.6,0.8" (all-sensor,motion-only)>
+NN, GB = os.environ.get('CMI_NN', NN), os.environ.get('CMI_GB', GB)
+if os.environ.get('CMI_W'):
+    w = [float(x) for x in os.environ['CMI_W'].split(',')]
+    W = {'full': w[0], 'imu': w[-1]}
+USE_NN, USE_GB = max(W.values()) > 0, min(W.values()) < 1
 SC = {k: Scaler.load(f'{P}/scalers/fold{k}.json') for k in range(5)}
 TREE_COLS = json.load(open(f'{P}/tree_columns.json')) if os.path.exists(f'{P}/tree_columns.json') else \
     [c for c in pq.read_schema(f'{P}/tree_full.parquet').names if c != 'sequence_id']
-GBS = [joblib.load(f) for f in sorted(glob.glob(f'{RUNS}/{GB}/model_s*_f*.joblib'))]
-NETS = {}
-for v in ('full', 'imu'):
-    NETS[v] = []
+GBS = [joblib.load(f) for f in sorted(glob.glob(f'{RUNS}/{GB}/model_s*_f*.joblib'))] if USE_GB else []
+NETS = {'full': [], 'imu': []}
+for v in NETS if USE_NN else ():
     for f in sorted(glob.glob(f'{RUNS}/{NN}/{v}_s*_f*.pt')):
         ck = torch.load(f, map_location='cpu')
         cfg = dict(ck['cfg'])
         net = ARCH[cfg.pop('core')](**cfg)
         net.load_state_dict(ck['sd'])
         NETS[v].append((net.eval(), int(f.rsplit('_f', 1)[1][:-3])))
-assert GBS and NETS['full'] and NETS['imu'], 'models not found'
+assert not USE_GB or GBS, f'no fitted models in {RUNS}/{GB}/ (only runs trained with --save have them)'
+assert not USE_NN or (NETS['full'] and NETS['imu']), f'no checkpoints in {RUNS}/{NN}/ (only runs trained with --save)'
+print(f'SUBMITTING: network {NN if USE_NN else "-"} ({len(NETS["full"])}+{len(NETS["imu"])} checkpoints), '
+      f'trees {GB if USE_GB else "-"} ({len(GBS)} models), weight on network {W}', flush=True)
 
 
 @torch.no_grad()
@@ -58,13 +67,17 @@ def predict(sequence, demographics) -> str:
     out = preprocess(sequence, demographics)                 # the same code that built the training features
     f = out.features
     v = 'imu' if f['thm_missing'].iloc[0] and f['tof_missing'].iloc[0] else 'full'
-    pn = []
-    for net, k in NETS[v]:
-        x, m = fixed_length(SC[k].transform(f), L)           # fold-k scaler, exactly as in training
-        pn.append(net(torch.tensor(x)[None], torch.tensor(m)[None])[0].softmax(1)[0].numpy())
-    row = pd.DataFrame([tree_summary(f)])[TREE_COLS]
-    pg = np.mean([g.predict_proba(row)[0] for g in GBS], axis=0)
-    return GESTURES[int(np.argmax(W[v] * np.mean(pn, axis=0) + (1 - W[v]) * pg))]
+    p = 0.0
+    if W[v] > 0:
+        pn = []
+        for net, k in NETS[v]:
+            x, m = fixed_length(SC[k].transform(f), L)       # fold-k scaler, exactly as in training
+            pn.append(net(torch.tensor(x)[None], torch.tensor(m)[None])[0].softmax(1)[0].numpy())
+        p = p + W[v] * np.mean(pn, axis=0)
+    if W[v] < 1:
+        row = pd.DataFrame([tree_summary(f)])[TREE_COLS]
+        p = p + (1 - W[v]) * np.mean([g.predict_proba(row)[0] for g in GBS], axis=0)
+    return GESTURES[int(np.argmax(p))]
 
 
 try:
