@@ -18,7 +18,7 @@ submission/            submit.py (inference code) and submission.ipynb (the Kagg
 ## Folds are pinned to a file
 
 `StratifiedGroupKFold` splits people differently in scikit-learn 1.7 and 1.8+, even with the same seed. The published
-split is `results/folds_used.csv`, and `scripts/01_build_dataset.py` (run by `run_pipeline.py`) **reuses it
+split is `results/06_validation/folds_used.csv`, and `scripts/01_build_dataset.py` (run by `run_pipeline.py`) **reuses it
 automatically**. Pass `--new-folds` only for an experiment that need not match the published results.
 `data/processed/` is not committed; it is rebuilt on demand.
 
@@ -53,17 +53,18 @@ Re-running the same command resumes: finished runs and finished tuning are skipp
 | --- | --- |
 | `runs/<model>/<kind>_s<seed>_f<fold>.npy` | out-of-fold probabilities (kind: `full`, `imu`, `blank`) |
 | `runs/<deployed>/*.pt`, `*.joblib`, `runs/blend_weights.json`, `runs/deploy.json` | what the submission loads |
-| `runs/logs/` | one log per job |
-| `results/params/*.json`, `*_trials.csv` | tuned settings and every tuning trial |
-| `results/table_*.csv`, `compare_*.csv`, `analysis_*/` | report tables, statistics, confusion matrices, per-person scores |
-| `results/figures/` | the report figures (PNG + PDF), redrawn by `python -m models.report_figures` |
+| `runs/logs/` | one log per job (kept with the Kaggle output, not in git) |
+| `results/<NN_topic>/table_*.csv`, `compare_*.csv` | report tables and statistics, one folder per topic (`models/paths.py`) |
+| `results/02_hyperparameter_tuning/params/` | tuned settings (read by the trainers) and every tuning trial |
+| `results/05_error_analysis/<model>/` | per-class F1, confusion matrices, per-person and per-posture scores |
+| `results/<NN_topic>/figures/` | the report figures (PNG), redrawn by `python -m models.report_figures` |
 | `cmi_models.zip`, `cmi_results.zip` | `runs/` and `results/` zipped for download / upload as Kaggle Datasets |
 
 ## Single steps
 
 ```
 python -m models.train.cnn_gru --variant full --folds 0 --seeds 0 --epochs 5     # one network, one fold
-python -m models.train.lgbm --params results/params/lgbm.json --name lgbm_tuned  # tuned tree model
+python -m models.train.lgbm --params results/02_hyperparameter_tuning/params/lgbm.json --name lgbm_tuned  # tuned tree model
 python -m models.train.tune --model cnn_gru --trials 12
 python -m models.evaluate compare cnn_gru_tuned lgbm_tuned cnn gru transformer xgb rf mlp
 python -m models.evaluate analysis cnn_gru_tuned

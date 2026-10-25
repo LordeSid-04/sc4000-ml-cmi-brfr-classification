@@ -1,6 +1,0 @@
-mlp: 5 runs, params defaults
-mlp seed 0 fold 0: full 0.8281  imu 0.7495
-mlp seed 0 fold 1: full 0.7983  imu 0.7199
-mlp seed 0 fold 2: full 0.7944  imu 0.7242
-mlp seed 0 fold 3: full 0.7569  imu 0.6892
-mlp seed 0 fold 4: full 0.7800  imu 0.7164

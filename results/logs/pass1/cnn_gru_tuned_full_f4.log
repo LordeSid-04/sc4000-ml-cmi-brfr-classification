@@ -1,2 +1,0 @@
-cnn_gru_tuned full on cuda: 8151 recordings, pool 57057, 1 runs, hp {'lr': 0.0038113002447988263, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.19539495381819283, 'd': 256}
-cnn_gru_tuned full seed 0 fold 4: full 0.8369  blank 0.7647

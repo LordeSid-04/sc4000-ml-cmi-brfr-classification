@@ -1,4 +1,0 @@
-abl_notofreg full on cuda: 8151 recordings, pool 57057, 3 runs, hp {'lr': 0.002, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.2, 'd': 192}
-abl_notofreg full seed 0 fold 1: full 0.8218  blank 0.7512
-abl_notofreg full seed 1 fold 1: full 0.8122  blank 0.7457
-abl_notofreg full seed 2 fold 1: full 0.8204  blank 0.7404

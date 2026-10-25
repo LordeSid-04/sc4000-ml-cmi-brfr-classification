@@ -9,7 +9,7 @@
 
   python -m models.train.tune --model cnn_gru --trials 12      # GPU
   python -m models.train.tune --model lgbm --trials 20         # CPU
-Writes results/params/<model>.json (best settings, read by the trainers via --params) and <model>_trials.csv."""
+Writes results/02_hyperparameter_tuning/params/<model>.json (best settings, read by the trainers via --params) and <model>_trials.csv."""
 import argparse
 import json
 from pathlib import Path
@@ -19,6 +19,7 @@ import optuna
 from sklearn.model_selection import StratifiedGroupKFold
 
 from models.common import combined, fit_scaler
+from models.paths import PARAMS
 from models.registry import NETS, TREES
 
 SPACE = {   # trial -> settings
@@ -91,7 +92,7 @@ def main():
     study = optuna.create_study(direction='maximize', sampler=optuna.samplers.TPESampler(seed=0),
                                 pruner=optuna.pruners.MedianPruner(n_startup_trials=3))
     study.optimize(objective, n_trials=trials)
-    out = Path('results/params')
+    out = PARAMS
     out.mkdir(parents=True, exist_ok=True)
     best = {**HP, **study.best_params} if is_net else study.best_params
     json.dump({'model': a.model, 'params': best, 'inner_combined_score': study.best_value, 'trials': trials,

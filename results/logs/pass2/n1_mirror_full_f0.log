@@ -1,4 +1,0 @@
-n1_mirror full on cuda: 8151 recordings, pool 57057, 3 runs, hp {'lr': 0.0038113002447988263, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.19539495381819283, 'd': 256}
-n1_mirror full seed 0 fold 0: full 0.8863  blank 0.8161
-n1_mirror full seed 1 fold 0: full 0.8858  blank 0.8225
-n1_mirror full seed 2 fold 0: full 0.8824  blank 0.8055

@@ -1,4 +1,0 @@
-abl_notofreg imu on cuda: 8151 recordings, pool 57057, 3 runs, hp {'lr': 0.002, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.2, 'd': 192}
-abl_notofreg imu seed 0 fold 1: imu 0.7518
-abl_notofreg imu seed 1 fold 1: imu 0.7496
-abl_notofreg imu seed 2 fold 1: imu 0.7528

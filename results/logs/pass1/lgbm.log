@@ -1,6 +1,0 @@
-lgbm: 5 runs, params defaults
-lgbm seed 0 fold 0: full 0.8381  imu 0.7770
-lgbm seed 0 fold 1: full 0.8115  imu 0.7351
-lgbm seed 0 fold 2: full 0.7880  imu 0.7259
-lgbm seed 0 fold 3: full 0.7739  imu 0.7136
-lgbm seed 0 fold 4: full 0.8000  imu 0.7308

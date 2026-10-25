@@ -1,7 +1,7 @@
 """Training loop shared by the summary-feature models (lgbm, xgb, rf, mlp). Each model's file just calls cli(model).
 Every recording is used twice (all sensors + motion-only copy), so one model serves both halves of the test set.
 Finished (seed, fold) runs are skipped.
-  python -m models.train.lgbm [--seeds 0 1 2] [--params results/params/lgbm.json --name lgbm_tuned] [--save]"""
+  python -m models.train.lgbm [--seeds 0 1 2] [--params results/02_hyperparameter_tuning/params/lgbm.json --name lgbm_tuned] [--save]"""
 import argparse
 import json
 from pathlib import Path

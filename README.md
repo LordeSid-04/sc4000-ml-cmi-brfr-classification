@@ -17,7 +17,8 @@ only. The score is ½ binary F1 (BFRB or not) + ½ macro F1 (which BFRB).
 | Tuned CNN-BiGRU | 0.825 [0.812, 0.838] |
 | LightGBM on 795 summary features | 0.773 [0.760, 0.785] |
 
-The full tables, statistics, error analysis and 11 figures are in **[results/](results/README.md)**.
+The full tables, statistics and 17 figures are in **[results/](results/README.md)**, in one folder per question:
+model comparison, hyper-parameter tuning, ablations, hybrids and ensembles, error analysis, and validation.
 
 ## Repository
 
@@ -28,12 +29,13 @@ models/               one file per model + shared code
   lgbm.py xgb.py rf.py mlp.py   summary-feature models
   hybrids.py            blend / stacker / trees-on-network-outputs
   evaluate.py           tables, bootstrap CIs, Holm-corrected comparisons, error analysis
-  report_figures.py     the figures in results/figures/
+  report_figures.py     the figures in results/*/figures/
+  paths.py              where every result file lives
   train/                one entry point per model, shared trainers, tuning, run_all.py (whole pipeline)
 submission/           Kaggle inference: submit.py and submission.ipynb
 scripts/              dataset build, parity check, quality checks (run by run_pipeline.py)
 tests/                preprocessing + model tests
-results/              published results, figures, logs, the fold split
+results/              published results by topic (tables + figures), the fold split
 ```
 
 ## Reproduce
@@ -48,7 +50,7 @@ python -m models.report_figures                           # figures from results
 
 ## How results are kept honest
 
-- **Folds:** 5 folds split by person (the test set has new people), pinned in `results/folds_used.csv`.
+- **Folds:** 5 folds split by person (the test set has new people), pinned in `results/06_validation/folds_used.csv`.
 - **No selection on reported folds:** the epoch count is fixed in advance, the EMA weights from the last epoch are reported, and nothing is chosen on a reported fold.
 - **Nested tuning:** tuning uses only folds 1-4. Fold 0 is untouched and reported separately.
 - **Hybrids** are fitted on other folds' out-of-fold predictions only.

@@ -1,2 +1,0 @@
-cnn_gru_tuned imu on cuda: 8151 recordings, pool 57057, 1 runs, hp {'lr': 0.0038113002447988263, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.19539495381819283, 'd': 256}
-cnn_gru_tuned imu seed 0 fold 0: imu 0.8138

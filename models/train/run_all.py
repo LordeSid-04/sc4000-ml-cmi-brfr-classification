@@ -8,8 +8,8 @@
  4. (--n1) build data/processed_mirror (left-handed wearers mirrored into the right-hand frame) + its copies
  5. network jobs (+ xgboost) run --workers at a time on the GPU(s); the other summary-feature models use the CPU
  6. evaluation (old result files are cleared first): tables with CIs, Holm-corrected comparisons, hybrids,
-    blend weights, error analysis, seed averaging, binary/macro split, figures (results/figures/);
-    results/run_info.json records versions, hardware and settings
+    blend weights, error analysis, seed averaging, binary/macro split and figures, organised by topic
+    (models/paths.py); results/06_validation/run_info.json records versions, hardware and settings
  7. runs/ and results/ are zipped: cmi_models.zip is what the submission notebook needs
 Safe to re-run after a crash or timeout: finished (model, fold, seed) runs, tuning and data builds are skipped."""
 import argparse
@@ -26,13 +26,13 @@ from pathlib import Path
 import pandas as pd
 
 from models.common import complete
+from models.paths import ERRORS, FOLDS, PARAMS, R, RUN_INFO, SECTIONS
 
 PY = sys.executable
 NETS = ['cnn_gru', 'cnn', 'gru', 'transformer']            # main model first, so partial results are already useful
 TREES = ['lgbm', 'xgb', 'rf', 'mlp']
 ABLATIONS = {'abl_noaug': ['--aug', '0'], 'abl_nophase': ['--phase', '0'],
              'abl_notofreg': ['--drop-sub', '_r0', '_r1', '_r2']}         # each removes one part of the main model
-PARAMS = Path('results/params')
 D, MIRROR = Path('data/processed'), Path('data/processed_mirror')
 
 
@@ -91,13 +91,16 @@ def bundle():
 
 
 def clear_results():
-    """Remove result files from earlier runs (they are regenerated below); keep tuning settings and archives."""
-    r = Path('results')
-    for p in list(r.glob('*')) if r.exists() else []:
-        if p.is_file() and p.name not in ('.gitkeep', 'run_info.json', 'folds_used.csv'):
-            p.unlink()
-        elif p.is_dir() and (p.name.startswith('analysis_') or p.name == 'figures'):
-            shutil.rmtree(p)
+    """Remove result files from earlier runs (all regenerated below). Kept: tuned settings and trials (reused),
+    the fold split, run info and data-build evidence."""
+    keep = {'run_info.json', 'folds_used.csv'}
+    for sec in SECTIONS:
+        for p in list(sec.glob('*')) if sec.exists() else []:
+            if p.is_file() and p.name not in keep:
+                p.unlink()
+            elif p.is_dir() and (p.name == 'figures' or sec == ERRORS):
+                shutil.rmtree(p)
+    shutil.rmtree(R / 'other', ignore_errors=True)
 
 
 def run_info(a, t0, failed, nn, gb):
@@ -114,10 +117,10 @@ def run_info(a, t0, failed, nn, gb):
                 gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())], packages=vers,
                 complete_runs=sorted(p.name for p in Path('runs').iterdir()
                                      if p.is_dir() and p.name not in ('logs', 'processed') and complete(p.name)))
-    Path('results').mkdir(exist_ok=True)
+    RUN_INFO.parent.mkdir(parents=True, exist_ok=True)
     if (D / 'sequences.csv').exists():          # the exact person -> fold split behind every number
-        pd.read_csv(D / 'sequences.csv')[['sequence_id', 'subject', 'fold']].to_csv('results/folds_used.csv', index=False)
-    Path('results/run_info.json').write_text(json.dumps(info, indent=2, default=str))
+        pd.read_csv(D / 'sequences.csv')[['sequence_id', 'subject', 'fold']].to_csv(FOLDS, index=False)
+    RUN_INFO.write_text(json.dumps(info, indent=2, default=str))
 
 
 def main():
@@ -137,6 +140,10 @@ def main():
     ap.add_argument('--no-eval', action='store_true')
     a = ap.parse_args()
     t0, failed = time.time(), []
+    legacy = R / 'params'                    # older layout (Pass 1-2 output): keep its tuned settings, don't re-tune
+    if legacy.exists() and not PARAMS.exists():
+        PARAMS.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(legacy), str(PARAMS))
 
     if not (D / 'features.npz').exists() or not (D / 'canonical' / 'offsets.npy').exists():
         if not a.data_zip:
@@ -178,7 +185,7 @@ def main():
                 if rc:
                     sys.exit('tuning failed')
         else:
-            print('tuning: reusing results/params/cnn_gru.json and lgbm.json', flush=True)
+            print(f'tuning: reusing {PARAMS}/cnn_gru.json and lgbm.json', flush=True)
 
     if a.n1:
         if not (MIRROR / 'features.npz').exists() or not (MIRROR / 'canonical' / 'offsets.npy').exists():

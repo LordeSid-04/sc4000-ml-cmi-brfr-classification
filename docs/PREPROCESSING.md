@@ -2,7 +2,7 @@
 
 > **Note (25 Oct 2026).** This document describes the preprocessing pipeline as built by the team. The LightGBM
 > "reference run" numbers in section 7 came from an earlier fold split (scikit-learn 1.8+). The published model
-> results in [`results/`](../results/README.md) use the split in `results/folds_used.csv` (scikit-learn 1.7, Kaggle),
+> results in [`results/`](../results/README.md) use the split in `results/06_validation/folds_used.csv` (scikit-learn 1.7, Kaggle),
 > which every rebuild now reuses by default. Cite only the numbers in `results/`. `data/processed/` is no longer
 > committed: `python run_pipeline.py --data <competition data>` rebuilds it in about 5 minutes.
 

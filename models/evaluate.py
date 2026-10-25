@@ -22,10 +22,10 @@ from sklearn.metrics import confusion_matrix, f1_score
 
 from models.common import SID, bootstrap, combined, get, holm, load_oof, pvalue, save_oof, score
 from models.hybrids import best_weight, fit_predict
+from models.paths import COMPARISON, ERRORS, HYBRIDS, out_dir
 from preprocessing.constants import SCORE_CLASSES
 
 D = Path('data/processed')
-R = Path('results')
 
 
 def setup():
@@ -43,8 +43,7 @@ def table(names, seqs, y, fold, subj, tag=None):
     df = pd.DataFrame(rows)
     df['combined [95% CI]'] = df.apply(lambda r: f'{r.combined:.4f} [{r.lo:.4f}, {r.hi:.4f}]', axis=1)
     print(df[['model', 'full', 'imu', 'combined [95% CI]', 'fold0']].round(4).to_string(index=False), flush=True)
-    R.mkdir(exist_ok=True)
-    df.round(5).to_csv(R / f'table_{tag or "_".join(n.replace(":", "-") for n in names)[:80]}.csv', index=False)
+    df.round(5).to_csv(out_dir(tag) / f'table_{tag or "_".join(n.replace(":", "-") for n in names)[:80]}.csv', index=False)
     return df
 
 
@@ -63,8 +62,7 @@ def compare(ref, *others, seqs=None, y=None, fold=None, subj=None, tag=None):
     df['p_holm'] = holm(df['p'])
     df['significant'] = df['p_holm'] < 0.05
     print(df.round(4).to_string(index=False), flush=True)
-    R.mkdir(exist_ok=True)
-    df.round(5).to_csv(R / f'compare_{tag or ref.replace(":", "-")}.csv', index=False)
+    df.round(5).to_csv(out_dir(tag) / f'compare_{tag or ref.replace(":", "-")}.csv', index=False)
 
 
 def hybrid(a, b, seqs, y, fold, subj):
@@ -72,8 +70,8 @@ def hybrid(a, b, seqs, y, fold, subj):
     X = [pd.read_parquet(D / f'tree_{t}.parquet').drop(columns='sequence_id') for t in ('full', 'imu')]
     outs = [fit_predict(y, fold, A[s], B[s], X[s]) for s in (0, 1)]
     w = {'full': best_weight(y, A[0], B[0]), 'imu': best_weight(y, A[1], B[1])}
-    for p in (Path('runs'), R):                                 # runs/ is uploaded together with the models
-        p.mkdir(exist_ok=True)
+    for p in (Path('runs'), HYBRIDS):                           # runs/ is uploaded together with the models
+        p.mkdir(parents=True, exist_ok=True)
         json.dump(w, open(p / 'blend_weights.json', 'w'))
         json.dump({'nn': a, 'gb': b}, open(p / 'deploy.json', 'w'))
     print(f'deployed blend: weight on {a} = {w["full"]:.2f} (all sensors), {w["imu"]:.2f} (motion-only)')
@@ -93,7 +91,7 @@ def hybrid(a, b, seqs, y, fold, subj):
 def analysis(name, seqs, y, fold, subj):
     """Error analysis for the report: where does the model fail, and for whom?"""
     pf, pi = get(name, fold)
-    out = R / f'analysis_{name.replace(":", "-")}'
+    out = ERRORS / name.replace(':', '-')
     out.mkdir(parents=True, exist_ok=True)
     yt = SID[y]
     per_class = pd.DataFrame({s: f1_score(yt, SID[p.argmax(1)], average=None, labels=range(9), zero_division=0)
@@ -111,26 +109,6 @@ def analysis(name, seqs, y, fold, subj):
         pd.DataFrame([dict(orientation=o, n=int(m.sum()), full=score(y[m], pf[m]), imu=score(y[m], pi[m]))
                       for o in seqs['orientation'].unique() for m in [(seqs['orientation'] == o).to_numpy()]]) \
             .round(4).to_csv(out / 'by_orientation.csv', index=False)
-    try:
-        import matplotlib
-        matplotlib.use('Agg')
-        import matplotlib.pyplot as plt
-        fig, ax = plt.subplots(1, 2, figsize=(13, 5.5))
-        short = [c.split(' - ')[-1] if c != 'non_target' else 'non-target' for c in SCORE_CLASSES]
-        for a_, s, p in ((ax[0], 'all sensors', pf), (ax[1], 'motion only', pi)):
-            cm = confusion_matrix(yt, SID[p.argmax(1)], labels=range(9), normalize='true')
-            a_.imshow(cm, cmap='Blues', vmin=0, vmax=1)
-            a_.set(xticks=range(9), yticks=range(9), xticklabels=short, yticklabels=short, title=f'{name}: {s}',
-                   xlabel='predicted', ylabel='true')
-            a_.tick_params(axis='x', rotation=60)
-            for i in range(9):
-                for j in range(9):
-                    a_.text(j, i, f'{cm[i, j]:.2f}', ha='center', va='center', fontsize=7,
-                            color='white' if cm[i, j] > 0.5 else 'black')
-        fig.tight_layout()
-        fig.savefig(out / 'confusion.png', dpi=150)
-    except ImportError:
-        pass
     print(per_class.round(3).to_string())
     print(f'worst 5 people: {per_subject.head(5)[["subject", "combined"]].round(3).values.tolist()}')
     print(f'saved to {out}/')
@@ -153,8 +131,8 @@ def seeds(names, seqs, y, fold, subj):
                          averaged=ens, gain=ens - np.mean(per)))
     df = pd.DataFrame(rows)
     print(df.round(4).to_string(index=False))
-    R.mkdir(exist_ok=True)
-    df.round(5).to_csv(R / 'seed_averaging.csv', index=False)
+    COMPARISON.mkdir(parents=True, exist_ok=True)
+    df.round(5).to_csv(COMPARISON / 'seed_averaging.csv', index=False)
 
 
 def breakdown(names, seqs, y, fold, subj):
@@ -170,8 +148,8 @@ def breakdown(names, seqs, y, fold, subj):
         rows.append(r)
     df = pd.DataFrame(rows)
     print(df.round(4).to_string(index=False))
-    R.mkdir(exist_ok=True)
-    df.round(5).to_csv(R / 'metric_breakdown.csv', index=False)
+    COMPARISON.mkdir(parents=True, exist_ok=True)
+    df.round(5).to_csv(COMPARISON / 'metric_breakdown.csv', index=False)
 
 
 def ensemble(name, *members, seqs=None, y=None, fold=None, subj=None):

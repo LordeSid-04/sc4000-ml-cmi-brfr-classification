@@ -1,2 +1,0 @@
-sanity_shuffled_cnn_gru imu on cuda: 8151 recordings, pool 57057, 1 runs, hp {'lr': 0.002, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.2, 'd': 192}
-sanity_shuffled_cnn_gru imu seed 0 fold 2: imu 0.4084

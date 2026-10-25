@@ -1,2 +1,0 @@
-gru full on cuda: 8151 recordings, pool 57057, 1 runs, hp {'lr': 0.002, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.2, 'd': 192}
-gru full seed 0 fold 1: full 0.8125  blank 0.7422

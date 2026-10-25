@@ -6,7 +6,7 @@ crashed or interrupted session resumes where it stopped.
 
   python -m models.train.cnn_gru --variant full            # all sensors (also saves 'blank': same model, sensors off)
   python -m models.train.cnn_gru --variant imu             # motion-only model
-  options: --folds 0 1  --seeds 0 1 2  --params results/params/cnn_gru.json (tuned settings)  --save (keep weights)
+  options: --folds 0 1  --seeds 0 1 2  --params results/02_hyperparameter_tuning/params/cnn_gru.json (tuned settings)  --save (keep weights)
            --phase 0 (no aux loss)  --aug 0 (no copies)  --drop-sub _r0 (zero matching columns)  --shuffle-labels (sanity)
 """
 import argparse

@@ -1,6 +1,0 @@
-sanity_shuffled_lgbm: 5 runs, params defaults
-sanity_shuffled_lgbm seed 0 fold 0: full 0.4045  imu 0.4008
-sanity_shuffled_lgbm seed 0 fold 1: full 0.4063  imu 0.4065
-sanity_shuffled_lgbm seed 0 fold 2: full 0.3959  imu 0.3875
-sanity_shuffled_lgbm seed 0 fold 3: full 0.4149  imu 0.4106
-sanity_shuffled_lgbm seed 0 fold 4: full 0.4266  imu 0.4213
