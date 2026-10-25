@@ -1,0 +1,4 @@
+abl_nophase full on cuda: 8151 recordings, pool 57057, 3 runs, hp {'lr': 0.002, 'epochs': 40, 'bs': 128, 'phase': 0.0, 'drop': 0.2, 'd': 192}
+abl_nophase full seed 0 fold 3: full 0.8213  blank 0.7519
+abl_nophase full seed 1 fold 3: full 0.8229  blank 0.7548
+abl_nophase full seed 2 fold 3: full 0.8244  blank 0.7538

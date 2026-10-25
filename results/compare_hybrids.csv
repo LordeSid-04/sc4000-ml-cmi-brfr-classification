@@ -1,0 +1,4 @@
+comparison,delta,lo,hi,p,folds_won,p_holm,significant
+h1_cnn_gru_tuned_lgbm_tuned - cnn_gru_tuned,0.0027,0.00057,0.00518,0.012,4/5,0.024,True
+h1_cnn_gru_tuned_lgbm_tuned - h2_cnn_gru_tuned_lgbm_tuned,0.00221,-0.00106,0.00534,0.204,3/5,0.204,False
+h1_cnn_gru_tuned_lgbm_tuned - h3_cnn_gru_tuned_lgbm_tuned,0.00839,0.00487,0.01174,0.0,5/5,0.0,True

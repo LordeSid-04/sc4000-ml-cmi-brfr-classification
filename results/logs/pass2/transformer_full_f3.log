@@ -1,0 +1,3 @@
+transformer full on cuda: 8151 recordings, pool 57057, 2 runs, hp {'lr': 0.002, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.2, 'd': 192}
+transformer full seed 1 fold 3: full 0.8127  blank 0.7530
+transformer full seed 2 fold 3: full 0.8149  blank 0.7508

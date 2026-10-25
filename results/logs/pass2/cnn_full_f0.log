@@ -1,0 +1,3 @@
+cnn full on cuda: 8151 recordings, pool 57057, 2 runs, hp {'lr': 0.002, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.2, 'd': 192}
+cnn full seed 1 fold 0: full 0.8709  blank 0.8070
+cnn full seed 2 fold 0: full 0.8685  blank 0.7958

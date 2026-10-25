@@ -1,0 +1,18 @@
+loaded (574945, 341) in 25s
+  1000 sequences (17s)
+  2000 sequences (32s)
+  3000 sequences (48s)
+  4000 sequences (63s)
+  5000 sequences (78s)
+  6000 sequences (93s)
+  7000 sequences (109s)
+  8000 sequences (123s)
+{
+  "fixed_length": 128,
+  "length_kept_whole": 0.9512943197153724,
+  "sequences": 8151,
+  "rows": 574945,
+  "sequences_with_issues": 0
+}
+117 per-row features; 795 tree features
+done in 175s

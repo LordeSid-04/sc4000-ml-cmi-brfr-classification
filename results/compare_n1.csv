@@ -1,0 +1,2 @@
+comparison,delta,lo,hi,p,folds_won,p_holm,significant
+n1_mirror - cnn_gru_tuned,0.01216,0.0058,0.01867,0.0,5/5,0.0,True

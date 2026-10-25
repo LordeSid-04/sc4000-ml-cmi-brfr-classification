@@ -1,0 +1,2 @@
+comparison,delta,lo,hi,p,folds_won,p_holm,significant
+lgbm_tuned - lgbm,-0.0003,-0.00272,0.00227,0.791,2/5,0.791,False

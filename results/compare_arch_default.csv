@@ -1,0 +1,4 @@
+comparison,delta,lo,hi,p,folds_won,p_holm,significant
+gru - cnn_gru,0.00476,-5e-05,0.00968,0.051,3/5,0.12,False
+gru - cnn,0.00569,0.00051,0.01091,0.04,4/5,0.12,False
+gru - transformer,0.00179,-0.00302,0.0066,0.486,2/5,0.486,False

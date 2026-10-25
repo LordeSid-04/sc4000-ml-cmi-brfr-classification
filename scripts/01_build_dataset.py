@@ -8,7 +8,8 @@ Outputs (in --out):
   tree_full.parquet    one summary row per recording (all sensors)
   tree_imu.parquet     same, with thermopile + ToF blanked (the IMU-only test half)
   canonical/           cleaned + oriented raw signals (.npy), for on-the-fly augmentation
-  folds.csv            the shared 5-fold subject split
+  folds.csv            the shared 5-fold subject split (reused from results/folds_used.csv when it exists,
+                       so every rebuild matches the published results whatever the scikit-learn version)
   scalers/             per-fold and all-data standardisation statistics
   meta.json            feature names, fixed length L, label maps, pipeline config
 """
@@ -38,12 +39,18 @@ def main():
     parser.add_argument('--out', default='data/processed')
     parser.add_argument('--length', type=int, default=0, help='fixed length L (0 = 95th percentile, rounded up to 8)')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--folds-from', help='CSV with sequence_id + fold to reuse instead of re-splitting. Use it for '
-                        'every rebuild that must be comparable: StratifiedGroupKFold splits differ across scikit-learn '
-                        'versions (1.7 vs 1.8+), even with the same seed')
+    parser.add_argument('--folds-from', default=None,
+                        help='CSV with sequence_id + fold to reuse (default: results/folds_used.csv if present). '
+                        'StratifiedGroupKFold splits differ across scikit-learn versions (1.7 vs 1.8+), even with the '
+                        'same seed, so comparable rebuilds must reuse the published split')
+    parser.add_argument('--new-folds', action='store_true', help='ignore the published split and re-split (not comparable)')
     parser.add_argument('--mirror-left', action='store_true',
                         help='mirror left-handed wearers into the right-hand frame (handedness is known at test time too)')
     args = parser.parse_args()
+    published = Path(__file__).resolve().parents[1] / 'results' / 'folds_used.csv'
+    if args.folds_from is None and not args.new_folds and published.exists():
+        args.folds_from = str(published)
+        print(f'reusing the published fold split: {published}', flush=True)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     (out / 'scalers').mkdir(exist_ok=True)
@@ -59,7 +66,8 @@ def main():
     seqs = result['sequences']
     if args.folds_from:
         folds = pd.read_csv(args.folds_from)[['sequence_id', 'fold']].merge(seqs[['sequence_id', 'subject']], on='sequence_id')
-        assert len(folds) == len(seqs), 'folds file does not cover every recording'
+        assert len(folds) == len(seqs), (f'{args.folds_from} does not cover every recording; '
+                                         'pass --new-folds to re-split (results will not be comparable)')
         folds = folds[['sequence_id', 'subject', 'fold']]
     else:
         folds = make_folds(seqs, n_splits=5, seed=args.seed)

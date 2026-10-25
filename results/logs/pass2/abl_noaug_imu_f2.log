@@ -1,0 +1,4 @@
+abl_noaug imu on cuda: 8151 recordings, pool 8151, 3 runs, hp {'lr': 0.002, 'epochs': 40, 'bs': 128, 'phase': 0.3, 'drop': 0.2, 'd': 192}
+abl_noaug imu seed 0 fold 2: imu 0.7633
+abl_noaug imu seed 1 fold 2: imu 0.7531
+abl_noaug imu seed 2 fold 2: imu 0.7423

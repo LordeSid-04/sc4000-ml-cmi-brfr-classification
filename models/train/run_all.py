@@ -8,7 +8,8 @@
  4. (--n1) build data/processed_mirror (left-handed wearers mirrored into the right-hand frame) + its copies
  5. network jobs (+ xgboost) run --workers at a time on the GPU(s); the other summary-feature models use the CPU
  6. evaluation (old result files are cleared first): tables with CIs, Holm-corrected comparisons, hybrids,
-    blend weights, error analysis; results/run_info.json records versions, hardware and settings
+    blend weights, error analysis, seed averaging, binary/macro split, figures (results/figures/);
+    results/run_info.json records versions, hardware and settings
  7. runs/ and results/ are zipped: cmi_models.zip is what the submission notebook needs
 Safe to re-run after a crash or timeout: finished (model, fold, seed) runs, tuning and data builds are skipped."""
 import argparse
@@ -95,7 +96,7 @@ def clear_results():
     for p in list(r.glob('*')) if r.exists() else []:
         if p.is_file() and p.name not in ('.gitkeep', 'run_info.json', 'folds_used.csv'):
             p.unlink()
-        elif p.is_dir() and p.name.startswith('analysis_'):
+        elif p.is_dir() and (p.name.startswith('analysis_') or p.name == 'figures'):
             shutil.rmtree(p)
 
 
@@ -249,11 +250,19 @@ def main():
             ev('N1: mirroring left-handed wearers', 'table', nn, 'n1_mirror', '--tag', 'n1')
             ev('N1, tested', 'compare', 'n1_mirror', nn, '--tag', 'n1')
             ev('error analysis: n1_mirror', 'analysis', 'n1_mirror')
+        arch = [n for n in ('gru', 'cnn_gru', 'cnn', 'transformer') if complete(n)]
+        if len(arch) > 1:     # a fair architecture test: every core at its default settings
+            ev('architectures at default settings (Holm-corrected)', 'compare', *arch, '--tag', 'arch_default')
+        trained = [n for n in [nn, gb, *NETS, *TREES, 'n1_mirror', *ABLATIONS] if complete(n)]
+        ev('seed averaging', 'seeds', *dict.fromkeys(trained))
+        ev('binary vs macro F1', 'breakdown', *dict.fromkeys(trained + [f'h1_{nn}_{gb}'] if complete(f'h1_{nn}_{gb}') else trained))
         sanity = [n for n in ('sanity_shuffled_cnn_gru', 'sanity_shuffled_lgbm') if complete(n)]
         if sanity:
             ev('sanity check: shuffled labels must fall to chance (about 0.37-0.40 for this metric)', 'table',
                *sanity, '--tag', 'sanity')
 
+    if not a.no_eval and subprocess.run([PY, '-m', 'models.report_figures']).returncode:
+        failed.append('figures')
     if (D / 'meta.json').exists():
         bundle()
     run_info(a, t0, failed, nn, gb)

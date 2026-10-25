@@ -1,4 +1,4 @@
-"""LightGBM on the 795 summary features. Defaults = the reference settings in data/processed/validation.json;
+"""LightGBM on the 795 summary features. Defaults = the team's reference settings from preprocessing validation;
 tuned settings (models.train.tune) arrive as keyword overrides."""
 
 

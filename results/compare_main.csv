@@ -1,0 +1,10 @@
+comparison,delta,lo,hi,p,folds_won,p_holm,significant
+cnn_gru_tuned - lgbm_tuned,0.05313,0.04509,0.06079,0.0,5/5,0.0,True
+cnn_gru_tuned - cnn_gru,0.00786,0.00471,0.01099,0.0,5/5,0.0,True
+cnn_gru_tuned - cnn,0.00879,0.00458,0.01271,0.0,4/5,0.0,True
+cnn_gru_tuned - gru,0.0031,-0.00165,0.00781,0.202,5/5,0.202,False
+cnn_gru_tuned - transformer,0.00489,0.00017,0.00948,0.04,3/5,0.08,False
+cnn_gru_tuned - lgbm,0.05283,0.04459,0.06041,0.0,5/5,0.0,True
+cnn_gru_tuned - xgb,0.05337,0.04474,0.06135,0.0,5/5,0.0,True
+cnn_gru_tuned - rf,0.0823,0.07216,0.09186,0.0,5/5,0.0,True
+cnn_gru_tuned - mlp,0.05799,0.05021,0.06558,0.0,5/5,0.0,True

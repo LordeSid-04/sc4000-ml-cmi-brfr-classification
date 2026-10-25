@@ -1,0 +1,4 @@
+comparison,delta,lo,hi,p,folds_won,p_holm,significant
+cnn_gru - abl_noaug,0.01055,0.00528,0.01603,0.0,4/5,0.0,True
+cnn_gru - abl_nophase,-0.00045,-0.00351,0.00274,0.794,2/5,0.794,False
+cnn_gru - abl_notofreg,0.00436,0.00121,0.00749,0.004,5/5,0.008,True

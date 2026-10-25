@@ -12,14 +12,15 @@ models/
     cnn.py gru.py transformer.py cnn_gru.py lgbm.py xgb.py rf.py mlp.py   one entry point per model
     augment.py         pre-computes augmented copies           tune.py          nested Optuna tuning
     run_all.py         the whole pipeline, in parallel
-submission/submit.py   the Kaggle inference notebook
+submission/            submit.py (inference code) and submission.ipynb (the Kaggle notebook)
 ```
 
 ## Folds are pinned to a file
 
-`StratifiedGroupKFold` splits people differently in scikit-learn 1.7 and 1.8+, even with the same seed. Every run
-therefore records its split in `results/folds_used.csv`. Rebuilds that must be comparable pass
-`--folds-from <that file>` to `scripts/01_build_dataset.py`; `run_all --n1` does this automatically.
+`StratifiedGroupKFold` splits people differently in scikit-learn 1.7 and 1.8+, even with the same seed. The published
+split is `results/folds_used.csv`, and `scripts/01_build_dataset.py` (run by `run_pipeline.py`) **reuses it
+automatically**. Pass `--new-folds` only for an experiment that need not match the published results.
+`data/processed/` is not committed; it is rebuilt on demand.
 
 **Never copy `data/` or `results/` from a fresh code download over a trained run:** they belong to that run.
 
@@ -55,6 +56,7 @@ Re-running the same command resumes: finished runs and finished tuning are skipp
 | `runs/logs/` | one log per job |
 | `results/params/*.json`, `*_trials.csv` | tuned settings and every tuning trial |
 | `results/table_*.csv`, `compare_*.csv`, `analysis_*/` | report tables, statistics, confusion matrices, per-person scores |
+| `results/figures/` | the report figures (PNG + PDF), redrawn by `python -m models.report_figures` |
 | `cmi_models.zip`, `cmi_results.zip` | `runs/` and `results/` zipped for download / upload as Kaggle Datasets |
 
 ## Single steps
@@ -65,5 +67,7 @@ python -m models.train.lgbm --params results/params/lgbm.json --name lgbm_tuned 
 python -m models.train.tune --model cnn_gru --trials 12
 python -m models.evaluate compare cnn_gru_tuned lgbm_tuned cnn gru transformer xgb rf mlp
 python -m models.evaluate analysis cnn_gru_tuned
+python -m models.evaluate ensemble ens_a n1_mirror gru transformer   # equal-weight ensemble -> runs/ens_a
+python -m models.report_figures
 python -m pytest tests/test_models.py
 ```

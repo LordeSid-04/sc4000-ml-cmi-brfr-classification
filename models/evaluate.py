@@ -4,6 +4,9 @@
   python -m models.evaluate compare cnn_gru lgbm xgb rf     # first model vs each other: paired bootstrap, Holm-corrected
   python -m models.evaluate hybrid cnn_gru lgbm             # h1/h2/h3 + runs/blend_weights.json for the submission
   python -m models.evaluate analysis cnn_gru                # per-class F1, confusion matrix, per-person, per-posture
+  python -m models.evaluate seeds cnn_gru lgbm ...          # each seed alone vs the seed average
+  python -m models.evaluate breakdown cnn_gru lgbm ...      # binary F1 (BFRB or not) vs macro F1 (which BFRB)
+  python -m models.evaluate ensemble NAME a b c             # equal-weight average of runs (no fitting) -> runs/NAME
 
 'name:blank' = the all-sensor model evaluated with its sensors switched off (routing vs one model).
 full / imu / combined = competition score on all-sensor inputs, motion-only inputs, and both pooled (ranks models).
@@ -17,7 +20,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import confusion_matrix, f1_score
 
-from models.common import SID, bootstrap, combined, get, holm, pvalue, save_oof, score
+from models.common import SID, bootstrap, combined, get, holm, load_oof, pvalue, save_oof, score
 from models.hybrids import best_weight, fit_predict
 from preprocessing.constants import SCORE_CLASSES
 
@@ -133,6 +136,53 @@ def analysis(name, seqs, y, fold, subj):
     print(f'saved to {out}/')
 
 
+def seeds(names, seqs, y, fold, subj):
+    """How much does averaging seeds help, and how much do single seeds vary?"""
+    rows = []
+    for n in names:
+        per = []
+        for s in sorted({int(p.name.split('_s')[1].split('_')[0]) for p in (Path('runs') / n).glob('full_s*_f0.npy')}):
+            pf, pi = np.zeros((len(y), 18)), np.zeros((len(y), 18))
+            for k in range(5):
+                pf[fold == k] = np.load(Path('runs') / n / f'full_s{s}_f{k}.npy')
+                pi[fold == k] = np.load(Path('runs') / n / f'imu_s{s}_f{k}.npy')
+            per.append(combined(y, pf, pi))
+        ens = combined(y, *get(n, fold))
+        rows.append(dict(model=n, seeds=len(per), single_mean=np.mean(per), single_min=np.min(per),
+                         single_max=np.max(per), seed_sd=np.std(per, ddof=1) if len(per) > 1 else np.nan,
+                         averaged=ens, gain=ens - np.mean(per)))
+    df = pd.DataFrame(rows)
+    print(df.round(4).to_string(index=False))
+    R.mkdir(exist_ok=True)
+    df.round(5).to_csv(R / 'seed_averaging.csv', index=False)
+
+
+def breakdown(names, seqs, y, fold, subj):
+    """The metric's two halves: binary F1 (is it a BFRB?) and macro F1 (which BFRB, 9 classes)."""
+    rows = []
+    for n in names:
+        pf, pi = get(n, fold)
+        r = {'model': n}
+        for s, p in (('full', pf), ('imu', pi)):
+            yt, yp = SID[y], SID[p.argmax(1)]
+            r[f'{s}_binary_f1'] = f1_score(yt < 8, yp < 8)
+            r[f'{s}_macro_f1'] = f1_score(yt, yp, average='macro', zero_division=0)
+        rows.append(r)
+    df = pd.DataFrame(rows)
+    print(df.round(4).to_string(index=False))
+    R.mkdir(exist_ok=True)
+    df.round(5).to_csv(R / 'metric_breakdown.csv', index=False)
+
+
+def ensemble(name, *members, seqs=None, y=None, fold=None, subj=None):
+    """Equal-weight average of several runs' seed-averaged predictions. Nothing is fitted, so nothing can leak."""
+    for kind in ('full', 'imu'):
+        p = np.mean([load_oof(m, kind, fold) for m in members], axis=0)
+        for k in range(5):
+            save_oof(name, kind, 0, k, p[fold == k])
+    print(f'{name} = mean of {", ".join(members)}: combined {combined(y, *get(name, fold)):.4f}')
+
+
 if __name__ == '__main__':
     cmd, args = sys.argv[1], sys.argv[2:]
     tag = None
@@ -144,5 +194,9 @@ if __name__ == '__main__':
         table(args, seqs, y, fold, subj, tag=tag)
     elif cmd == 'compare':
         compare(*args, seqs=seqs, y=y, fold=fold, subj=subj, tag=tag)
+    elif cmd in ('seeds', 'breakdown'):
+        {'seeds': seeds, 'breakdown': breakdown}[cmd](args, seqs, y, fold, subj)
+    elif cmd == 'ensemble':
+        ensemble(*args, seqs=seqs, y=y, fold=fold, subj=subj)
     else:
         {'hybrid': hybrid, 'analysis': analysis}[cmd](*args, seqs, y, fold, subj)
