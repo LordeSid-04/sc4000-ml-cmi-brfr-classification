@@ -1,6 +1,10 @@
 """Run the complete training pipeline for every model, in parallel, then evaluate and package the results.
 
-  python -m models.train.run_all [--data-zip PATH] [--tune] [--ablations] [--sanity] [--n1] [--seeds 0 1 2] [--workers 4]
+  python -m models.train.run_all [--data-zip PATH] [--tune] [--ablations] [--sanity] [--n1] [--final] [--seeds 0 1 2]
+
+--final trains what is submitted: the tuned CNN-BiGRU, the BiGRU and the Transformer, all on left-hand-mirrored data
+and all with saved weights, then averages them and sets up per-person balancing (runs/deploy.json). It implies --tune
+and --n1.
 
  1. (optional) --data-zip: build data/processed from the competition data (python run_pipeline.py)
  2. pre-compute augmented copies of the training recordings (once, all CPU cores)
@@ -8,8 +12,8 @@
  4. (--n1) build data/processed_mirror (left-handed wearers mirrored into the right-hand frame) + its copies
  5. network jobs (+ xgboost) run --workers at a time on the GPU(s); the other summary-feature models use the CPU
  6. evaluation (old result files are cleared first): tables with CIs, Holm-corrected comparisons, hybrids,
-    blend weights, error analysis, seed averaging, binary/macro split and figures, organised by topic
-    (models/paths.py); results/06_validation/run_info.json records versions, hardware and settings
+    the final ensemble and its per-person balancing, error analysis, seed averaging, binary/macro split and
+    figures, organised by topic (models/paths.py); results/06_validation/run_info.json records versions, hardware and settings
  7. runs/ and results/ are zipped: cmi_models.zip is what the submission notebook needs
 Safe to re-run after a crash or timeout: finished (model, fold, seed) runs, tuning and data builds are skipped."""
 import argparse
@@ -33,6 +37,7 @@ NETS = ['cnn_gru', 'cnn', 'gru', 'transformer']            # main model first, s
 TREES = ['lgbm', 'xgb', 'rf', 'mlp']
 ABLATIONS = {'abl_noaug': ['--aug', '0'], 'abl_nophase': ['--phase', '0'],
              'abl_notofreg': ['--drop-sub', '_r0', '_r1', '_r2']}         # each removes one part of the main model
+FINAL = ['n1_mirror', 'n1_gru', 'n1_transformer']        # the submitted ensemble (all on mirrored data, all saved)
 D, MIRROR = Path('data/processed'), Path('data/processed_mirror')
 
 
@@ -59,15 +64,19 @@ def plan(a):
     if a.tune:
         nets.insert(0, ('cnn_gru_tuned', 'cnn_gru', tuned))
         trees.insert(0, ('lgbm_tuned', 'lgbm', ['--params', str(PARAMS / 'lgbm.json')]))
-    if a.n1:          # same model and settings as the deployed network, mirrored data: isolates the effect of N1
+    if a.n1:          # same model and settings as the tuned network, mirrored data: isolates the effect of N1
         nets.append(('n1_mirror', 'cnn_gru', [*tuned, '--data', str(MIRROR)]))
+    if a.final:       # the other two architectures on mirrored data, at their (default) settings
+        nets += [(n, core, ['--data', str(MIRROR)]) for n, core in (('n1_gru', 'gru'), ('n1_transformer', 'transformer'))]
+        nets.sort(key=lambda n: n[0] not in FINAL)     # submitted networks first: a cut-short session still has them
+    keep = {nn, *(FINAL if a.final else ())}           # runs whose weights are saved (everything that can be submitted)
     if a.ablations:
         nets += [(n, 'cnn_gru', x) for n, x in ABLATIONS.items()]
     if a.sanity:      # permuted labels: scores must collapse to chance, otherwise something leaks
         nets.append(('sanity_shuffled_cnn_gru', 'cnn_gru', ['--shuffle-labels', '--seeds', '0']))
         trees.append(('sanity_shuffled_lgbm', 'lgbm', ['--shuffle-labels', '--seeds', '0']))
     gpu = [(f'{name}_{v}_f{k}', [PY, '-m', f'models.train.{core}', '--name', name, '--variant', v, '--folds', str(k),
-                                 *s, *ep, *extra, *(['--save'] if name == nn else [])])
+                                 *s, *ep, *extra, *(['--save'] if name in keep else [])])
            for name, core, extra in nets for v in ('full', 'imu') for k in range(5)]
     cpu = []
     for name, core, extra in trees:
@@ -79,15 +88,18 @@ def plan(a):
 
 def bundle():
     """Ship the exact metadata, scalers and tree-column order this run trained with, next to the models,
-    so the submission can never pair the models with a differently built copy."""
+    so the submission can never pair the models with a differently built copy. runs/processed = as recorded,
+    runs/processed_mirror = left-handers mirrored (the submission picks the one each checkpoint was trained on)."""
     import pyarrow.parquet as pq
-    out = Path('runs/processed')
-    out.mkdir(parents=True, exist_ok=True)
-    shutil.copy(D / 'meta.json', out / 'meta.json')
-    shutil.copytree(D / 'scalers', out / 'scalers', dirs_exist_ok=True)
-    pd.read_csv(D / 'sequences.csv')[['sequence_id', 'subject', 'fold']].to_csv(out / 'folds_used.csv', index=False)
-    cols = [c for c in pq.read_schema(D / 'tree_full.parquet').names if c != 'sequence_id']
-    (out / 'tree_columns.json').write_text(json.dumps(cols))
+    for src, out in ((D, Path('runs/processed')), (MIRROR, Path('runs/processed_mirror'))):
+        if not (src / 'meta.json').exists():
+            continue
+        out.mkdir(parents=True, exist_ok=True)
+        shutil.copy(src / 'meta.json', out / 'meta.json')
+        shutil.copytree(src / 'scalers', out / 'scalers', dirs_exist_ok=True)
+        pd.read_csv(src / 'sequences.csv')[['sequence_id', 'subject', 'fold']].to_csv(out / 'folds_used.csv', index=False)
+        cols = [c for c in pq.read_schema(src / 'tree_full.parquet').names if c != 'sequence_id']
+        (out / 'tree_columns.json').write_text(json.dumps(cols))
 
 
 def clear_results():
@@ -113,7 +125,8 @@ def run_info(a, t0, failed, nn, gb):
         except md.PackageNotFoundError:
             vers[p] = None
     info = dict(finished=time.strftime('%Y-%m-%d %H:%M:%S %Z'), minutes=round((time.time() - t0) / 60, 1),
-                args=vars(a), deployed={'nn': nn, 'gb': gb}, failed=failed, python=platform.python_version(),
+                args=vars(a), failed=failed, deployed=json.loads(Path('runs/deploy.json').read_text())
+                if Path('runs/deploy.json').exists() else None, python=platform.python_version(),
                 gpus=[torch.cuda.get_device_name(i) for i in range(torch.cuda.device_count())], packages=vers,
                 complete_runs=sorted(p.name for p in Path('runs').iterdir()
                                      if p.is_dir() and p.name not in ('logs', 'processed') and complete(p.name)))
@@ -134,11 +147,14 @@ def main():
     ap.add_argument('--only', nargs='*', help='train only these base models (e.g. cnn_gru lgbm)')
     ap.add_argument('--tune', action='store_true', help='nested tuning of cnn_gru + lgbm, then train and deploy them')
     ap.add_argument('--trials', type=int, nargs=2, default=[12, 20], metavar=('NN', 'TREES'))
-    ap.add_argument('--n1', action='store_true', help='N1 experiment: the deployed network on left-hand-mirrored data')
+    ap.add_argument('--n1', action='store_true', help='N1 experiment: the tuned network on left-hand-mirrored data')
+    ap.add_argument('--final', action='store_true', help='train, save and deploy the submitted ensemble (implies --tune --n1)')
     ap.add_argument('--ablations', action='store_true', help='also run the main-model ablations')
     ap.add_argument('--sanity', action='store_true', help='also run the shuffled-label leakage check')
     ap.add_argument('--no-eval', action='store_true')
     a = ap.parse_args()
+    if a.final:
+        a.tune = a.n1 = True
     t0, failed = time.time(), []
     legacy = R / 'params'                    # older layout (Pass 1-2 output): keep its tuned settings, don't re-tune
     if legacy.exists() and not PARAMS.exists():
@@ -206,7 +222,7 @@ def main():
 
     gpu_jobs, cpu_jobs, (nn, gb) = plan(a)
     print(f'{len(gpu_jobs)} GPU jobs ({a.workers} at a time, {n_gpu} GPU(s)) + {len(cpu_jobs)} CPU tree models, '
-          f'seeds {a.seeds}; deploying {nn} + {gb}', flush=True)
+          f'seeds {a.seeds}; deploying {" + ".join(FINAL) if a.final else nn + " + " + gb}', flush=True)
 
     def run(i, name, cmd, use_gpu):
         return name, *sh(cmd, f'runs/logs/{name}.log', env(i, use_gpu, xgb='models.train.xgb' in cmd))
@@ -253,16 +269,26 @@ def main():
         if abl and complete('cnn_gru'):
             ev('ablations (each removes one component of the main model)', 'table', 'cnn_gru', *abl, '--tag', 'ablations')
             ev('ablations, tested (Holm-corrected)', 'compare', 'cnn_gru', *abl, '--tag', 'ablations')
-        if complete('n1_mirror') and complete(nn):
-            ev('N1: mirroring left-handed wearers', 'table', nn, 'n1_mirror', '--tag', 'n1')
-            ev('N1, tested', 'compare', 'n1_mirror', nn, '--tag', 'n1')
+        n1 = [(m, b) for m, b in (('n1_mirror', nn), ('n1_gru', 'gru'), ('n1_transformer', 'transformer'))
+              if complete(m) and complete(b)]                 # each architecture with and without mirroring
+        if n1:
+            ev('N1: mirroring left-handed wearers', 'table', *[x for m, b in n1 for x in (b, m)], '--tag', 'n1')
+            ev('N1, tested per architecture (Holm-corrected)', 'pairs', *[f'{m},{b}' for m, b in n1], '--tag', 'n1')
             ev('error analysis: n1_mirror', 'analysis', 'n1_mirror')
+        if all(complete(m) for m in FINAL):
+            h1 = [f'h1_{nn}_{gb}'] if complete(f'h1_{nn}_{gb}') else []
+            ev('final ensemble = equal-weight average of the three mirrored networks', 'ensemble', 'final', *FINAL)
+            ev('final ensemble vs its members and the first submission', 'table', 'final', *FINAL, *h1, nn,
+               '--tag', 'final')
+            ev('final ensemble, tested (Holm-corrected)', 'compare', 'final', *FINAL, *h1, nn, '--tag', 'final')
+            ev('error analysis: final', 'analysis', 'final')
+            ev('per-person balancing (strength chosen on other folds) -> runs/deploy.json', 'deploy', 'final', *FINAL)
         arch = [n for n in ('gru', 'cnn_gru', 'cnn', 'transformer') if complete(n)]
         if len(arch) > 1:     # a fair architecture test: every core at its default settings
             ev('architectures at default settings (Holm-corrected)', 'compare', *arch, '--tag', 'arch_default')
-        trained = [n for n in [nn, gb, *NETS, *TREES, 'n1_mirror', *ABLATIONS] if complete(n)]
+        trained = [n for n in [nn, gb, *NETS, *TREES, *FINAL, *ABLATIONS] if complete(n)]
         ev('seed averaging', 'seeds', *dict.fromkeys(trained))
-        ev('binary vs macro F1', 'breakdown', *dict.fromkeys(trained + [f'h1_{nn}_{gb}'] if complete(f'h1_{nn}_{gb}') else trained))
+        ev('binary vs macro F1', 'breakdown', *dict.fromkeys(trained + [n for n in (f'h1_{nn}_{gb}', 'final') if complete(n)]))
         sanity = [n for n in ('sanity_shuffled_cnn_gru', 'sanity_shuffled_lgbm') if complete(n)]
         if sanity:
             ev('sanity check: shuffled labels must fall to chance (about 0.37-0.40 for this metric)', 'table',

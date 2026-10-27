@@ -24,7 +24,10 @@ INK, INK2, MUTED, GRID = '#0b0b0b', '#52514e', '#8a8984', '#e4e3df'
 FAMILY = {'net': (BLUE, 'o', 'Sequence network'), 'tree': (ORANGE, 's', 'Summary-feature model'),
           'hyb': (AQUA, 'D', 'Hybrid (network + LightGBM)')}
 NAMES = {
+    'final': ('Final: 3 mirrored networks averaged (submitted)', 'net'),
     'n1_mirror': ('N1: tuned CNN-BiGRU, left-handers mirrored', 'net'),
+    'n1_gru': ('N1: BiGRU, left-handers mirrored', 'net'),
+    'n1_transformer': ('N1: Transformer, left-handers mirrored', 'net'),
     'h1_cnn_gru_tuned_lgbm_tuned': ('H1: weighted blend', 'hyb'),
     'h2_cnn_gru_tuned_lgbm_tuned': ('H2: logistic stacker', 'hyb'),
     'h3_cnn_gru_tuned_lgbm_tuned': ('H3: LightGBM on network outputs', 'hyb'),
@@ -63,12 +66,18 @@ def family_legend(ax, fams=('net', 'tree', 'hyb'), loc='lower right'):
 
 
 SECTION_OF = {'main': COMPARISON, 'tuning': TUNING, 'ablations': ABLATIONS, 'n1': ABLATIONS, 'routing': ABLATIONS,
-              'hybrids': HYBRIDS, 'ensembles_exploratory': HYBRIDS, 'sanity': VALIDATION, 'arch_default': COMPARISON,
+              'hybrids': HYBRIDS, 'final': HYBRIDS, 'balancing': HYBRIDS, 'sanity': VALIDATION, 'arch_default': COMPARISON,
               'tuning_nn': TUNING, 'tuning_gb': TUNING}
 
 
 def table(tag):
     return pd.read_csv(SECTION_OF[tag] / f'table_{tag}.csv').set_index('model')
+
+
+def tables(*tags):
+    """Every model row from these tables (missing tables skipped), first occurrence kept, only named models."""
+    t = pd.concat([table(g) for g in tags if (SECTION_OF[g] / f'table_{g}.csv').exists()])
+    return t[~t.index.duplicated()].loc[[m for m in NAMES if m in t.index]]
 
 
 def compare(tag):
@@ -80,29 +89,29 @@ def analysis(model, name):
 
 
 def fig_model_comparison():
-    t = pd.concat([table('main'), table('hybrids'), table('n1')])
-    t = t[~t.index.duplicated()].loc[[m for m in NAMES if m in t.index]].sort_values('combined')
-    fig, ax = plt.subplots(figsize=(7.2, 4.6))
+    t = tables('main', 'hybrids', 'n1', 'final').sort_values('combined')
+    best = t.index[-1]
+    fig, ax = plt.subplots(figsize=(7.2, 1.2 + 0.25 * len(t)))
     for i, (m, r) in enumerate(t.iterrows()):
         c, mk, _ = FAMILY[NAMES[m][1]]
         ax.plot([r.lo, r.hi], [i, i], color=c, lw=2, solid_capstyle='round', alpha=0.45)
-        ax.plot(r.combined, i, marker=mk, color=c, ms=8 if m != 'n1_mirror' else 10, mec='white', mew=1.5)
+        ax.plot(r.combined, i, marker=mk, color=c, ms=8 if m != best else 10, mec='white', mew=1.5)
         ax.text(r.hi + 0.002, i, f'{r.combined:.3f}', va='center', fontsize=8,
-                color=INK if m == 'n1_mirror' else INK2, fontweight='bold' if m == 'n1_mirror' else 'normal')
+                color=INK if m == best else INK2, fontweight='bold' if m == best else 'normal')
     ax.set_yticks(range(len(t)), [NAMES[m][0] for m in t.index])
     ax.get_yticklabels()[-1].set_fontweight('bold')
     ax.set_xlabel('Competition score, combined (½ binary F1 + ½ macro F1), 5-fold CV, mean of 3 seeds')
     ax.set_xlim(t.lo.min() - 0.01, t.hi.max() + 0.02)
     ax.grid(axis='y', visible=False)
-    ax.set_title('Sequence networks beat summary-feature models; mirroring left-handers (N1) is best')
+    ax.set_title('Sequence networks beat summary-feature models; mirrored networks, averaged, are best'
+                 if best == 'final' else 'Sequence networks beat summary-feature models; mirroring left-handers (N1) is best')
     family_legend(ax)
     save(fig, COMPARISON, 'model_comparison', 'Bars: 95% confidence interval from resampling the 81 people (2,000 resamples).')
 
 
 def fig_sensor_settings():
-    t = pd.concat([table('main'), table('hybrids'), table('n1')])
-    t = t[~t.index.duplicated()].loc[[m for m in NAMES if m in t.index]].sort_values('combined')
-    fig, ax = plt.subplots(figsize=(7.2, 4.6))
+    t = tables('main', 'hybrids', 'n1', 'final').sort_values('combined')
+    fig, ax = plt.subplots(figsize=(7.2, 1.2 + 0.25 * len(t)))
     for i, (m, r) in enumerate(t.iterrows()):
         ax.plot([r.imu, r.full], [i, i], color=GRID, lw=3, solid_capstyle='round', zorder=1)
         ax.plot(r.full, i, 'o', color=BLUE, ms=8, mec='white', mew=1.5, zorder=3)
@@ -131,10 +140,15 @@ def fig_effects():
             row('hybrids', 'h1_cnn_gru_tuned_lgbm_tuned - cnn_gru_tuned', 'H1: blend with LightGBM', 'component'),
             row('ablations', 'cnn_gru - abl_nophase', 'N2: phase auxiliary loss', 'novelty'),
             row('tuning_gb', 'lgbm_tuned - lgbm', 'Nested tuning: LightGBM', 'component')]
+    n1 = compare('n1')
+    rows[1:1] = [row('n1', f'n1_{a} - {a}', f'N1 on the {lab}', 'novelty') for a, lab in
+                 (('gru', 'BiGRU'), ('transformer', 'Transformer')) if f'n1_{a} - {a}' in n1.index]
+    if (HYBRIDS / 'compare_final.csv').exists():
+        rows.insert(0, row('final', 'final - n1_mirror', 'Averaging 3 mirrored architectures (vs N1 alone)', 'component'))
     if (COMPARISON / 'compare_arch_default.csv').exists():
         rows.append(row('arch_default', 'gru - cnn_gru', 'Architecture: BiGRU vs CNN-BiGRU (both default)', 'component'))
     d = pd.DataFrame(rows)[::-1].reset_index(drop=True)
-    fig, ax = plt.subplots(figsize=(7.2, 4.0))
+    fig, ax = plt.subplots(figsize=(7.2, 1.0 + 0.33 * len(d)))
     ax.axvline(0, color=INK2, lw=1)
     for i, r in d.iterrows():
         c = BLUE if r.kind == 'novelty' else INK2
@@ -305,26 +319,31 @@ def fig_posture():
     save(fig, ERRORS, 'posture')
 
 
-def fig_ensembles():
-    if not (HYBRIDS / 'table_ensembles_exploratory.csv').exists():
-        return
-    t = table('ensembles_exploratory').sort_values('combined')
-    lab = {'n1_mirror': 'N1 alone', 'ens_networks': 'CNN-BiGRU (tuned) + BiGRU + Transformer + CNN',
-           'ens_n1_cnn_gru_tuned': 'N1 + CNN-BiGRU (tuned)', 'ens_n1_gru_transformer': 'N1 + BiGRU + Transformer'}
-    fig, ax = plt.subplots(figsize=(7.2, 2.4))
-    base = t.loc['n1_mirror', 'combined']
-    ax.axvline(base, color=GRID, lw=1.2)
-    for i, (m, r) in enumerate(t.iterrows()):
-        c = BLUE if m != 'n1_mirror' else INK2
-        ax.plot([r.lo, r.hi], [i, i], color=c, lw=2, alpha=0.45, solid_capstyle='round')
-        ax.plot(r.combined, i, 'o', color=c, ms=8, mec='white', mew=1.5)
-        ax.text(r.hi + 0.002, i, f'{r.combined:.3f} ({r.combined - base:+.3f})', va='center', fontsize=8, color=INK2)
-    ax.set_yticks(range(len(t)), [lab.get(m, m) for m in t.index])
-    ax.set_xlim(t.lo.min() - 0.005, t.hi.max() + 0.025)
-    ax.set_xlabel('Combined competition score (5-fold CV), equal-weight averages, nothing fitted')
-    ax.grid(axis='y', visible=False)
-    ax.set_title('Mixing architectures adds more than mixing views (exploratory)')
-    save(fig, HYBRIDS, 'ensembles_exploratory', 'Exploratory: ensembles chosen after seeing CV, so treat the ranking as indicative.')
+def fig_final():
+    """The submitted model: what averaging the mirrored networks adds, and what per-person balancing adds on top."""
+    t = table('final').sort_values('combined')
+    b = table('balancing') if (HYBRIDS / 'table_balancing.csv').exists() else None
+    fig, axes = plt.subplots(1, 2, figsize=(7.6, 2.9), gridspec_kw=dict(width_ratios=[2.6, 1]))
+    dot_ci(axes[0], t, [NAMES[m][0] for m in t.index], [FAMILY[NAMES[m][1]][0] for m in t.index],
+           ref=t.loc['n1_mirror', 'combined'], bold='final')
+    axes[0].set_xlim(t.lo.min() - 0.004, t.hi.max() + 0.014)
+    axes[0].set_xlabel('Combined competition score (5-fold CV), 95% CI')
+    axes[0].set_title('Averaging mirrored architectures')
+    if b is not None:
+        r = b.set_index('balancing')
+        for i, c in enumerate((MUTED, BLUE)):                 # dots, not bars: the axis does not start at zero
+            axes[1].errorbar(i, r.score.iloc[i], yerr=r.sd_over_replays.iloc[i], fmt='o', color=c, ms=8, mec='white',
+                             mew=1.5, ecolor=c, elinewidth=2, capsize=0, alpha=0.9)
+        axes[1].set_xlim(-0.6, 1.6)
+        axes[1].set_ylim((r.score - r.sd_over_replays).min() - 0.004, (r.score + r.sd_over_replays).max() + 0.002)
+        axes[1].set_xticks([0, 1], [f'off\n{r.score.iloc[0]:.3f}', f'on\n{r.score.iloc[1]:.3f}'])
+        axes[1].set_xlabel('Per-person balancing')
+        axes[1].set_ylabel('Replayed test score')
+        axes[1].grid(axis='x', visible=False)
+        axes[1].set_title(f'Balancing {r.loc["on", "delta"]:+.3f}')
+    fig.tight_layout()
+    save(fig, HYBRIDS, 'final_model', 'Balancing: strength chosen on other folds; 20 replays of the test server (random order, '
+         'random all-sensor / motion-only per recording); whiskers = SD over replays.' if b is not None else None)
 
 
 def fig_tuning():
@@ -517,7 +536,7 @@ def fig_sanity():
 
 if __name__ == '__main__':
     for f in (fig_model_comparison, fig_sensor_settings, fig_effects, fig_per_class, fig_confusion, fig_handedness,
-              fig_seed_averaging, fig_metric_breakdown, fig_posture, fig_ensembles, fig_tuning, fig_architectures,
+              fig_seed_averaging, fig_metric_breakdown, fig_posture, fig_final, fig_tuning, fig_architectures,
               fig_tuning_search_space, fig_default_vs_tuned, fig_ablation_scores, fig_hybrids, fig_sanity):
         try:
             f()

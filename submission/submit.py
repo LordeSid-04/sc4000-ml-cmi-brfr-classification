@@ -1,21 +1,29 @@
-"""Kaggle inference notebook (internet off). Attach two private datasets:
+"""Kaggle inference notebook (internet off). Inputs:
   cmi-code   = this repo (the code: preprocessing/, models/)
-  cmi-models = the unzipped cmi_models.zip: checkpoints, fitted trees, blend_weights.json, deploy.json and processed/
-               (the exact meta.json, scalers and tree-column order the models were trained with)
+  cmi-models = runs/ from training (or the training notebook itself): checkpoints, deploy.json, processed/ and
+               processed_mirror/ (the exact meta.json and scalers the models were trained with)
 Both folders are found automatically under /kaggle/input (set CMI_CODE / CMI_RUNS to override).
+
+What is submitted is read from runs/deploy.json (written by `python -m models.evaluate deploy` or `hybrid`):
+  nn       networks; each network's checkpoints (folds x seeds) are averaged, then the networks are averaged
+  gb       optional tree model (null = none), blended as  w * networks + (1 - w) * trees,  w from `weights`
+  balance  per-person balancing strength (models/balance.py; 0 = off), quota = gestures per person in training
 Every recording is routed by its sensors: no thermopile AND no ToF -> motion-only models, else all-sensor models.
-Prediction = w * mean(NN folds x seeds) + (1 - w) * mean(tree folds x seeds); the pair and w come from
-`python -m models.evaluate hybrid <nn> <gb>` (runs/deploy.json, runs/blend_weights.json)."""
+A checkpoint trained on left-hand-mirrored data gets mirrored inputs (handedness comes with each test recording).
+
+Override in a cell BEFORE running this file (nothing has to be re-uploaded):
+  CMI_NN=n1_mirror,n1_gru  CMI_GB=lgbm_tuned (or none)  CMI_W=1 | 0.6 | 0.6,0.8 (all-sensor,motion-only)  CMI_BAL=0"""
 import glob
 import json
 import os
 import sys
+from collections import defaultdict
 
 import joblib
 import numpy as np
 import pandas as pd
-import pyarrow.parquet as pq
 import torch
+
 
 def find(name):
     """Folder holding `name` anywhere under /kaggle/input (Kaggle's mount paths vary by account and notebook)."""
@@ -26,58 +34,93 @@ def find(name):
 CODE = os.environ.get('CMI_CODE') or os.path.dirname(find('submission/submit.py') or '/kaggle/input/cmi-code/x')
 RUNS = os.environ.get('CMI_RUNS') or find('deploy.json') or '/kaggle/input/cmi-models'
 sys.path.insert(0, CODE)
+from models.balance import adjust                                      # noqa: E402
 from models.registry import NETS as ARCH                               # noqa: E402
 from preprocessing.constants import GESTURES                           # noqa: E402
-from preprocessing.pipeline import preprocess                          # noqa: E402
+from preprocessing.pipeline import PipelineConfig, preprocess          # noqa: E402
 from preprocessing.step5_shaping import Scaler, fixed_length, tree_summary   # noqa: E402
 
 torch.set_num_threads(4)
-P = f'{RUNS}/processed' if os.path.isdir(f'{RUNS}/processed') else f'{CODE}/data/processed'   # bundled by run_all
-meta = json.load(open(f'{P}/meta.json'))
-L = meta['fixed_length']
-W = json.load(open(f'{RUNS}/blend_weights.json'))
-NN, GB = json.load(open(f'{RUNS}/deploy.json')).values()      # written by `evaluate hybrid <nn> <gb>`
-# Choose what to submit without re-uploading anything (set these in a cell BEFORE running this file):
-#   CMI_NN=<run name>  CMI_GB=<run name>  CMI_W=<weight on the network, e.g. 1 / 0 / 0.6 / "0.6,0.8" (all-sensor,motion-only)>
-NN, GB = os.environ.get('CMI_NN', NN), os.environ.get('CMI_GB', GB)
+DEP = json.load(open(f'{RUNS}/deploy.json'))
+if 'weights' not in DEP:                                      # older runs: {"nn": name, "gb": name} + blend_weights.json
+    DEP = dict(nn=[DEP['nn']], gb=DEP['gb'], weights=json.load(open(f'{RUNS}/blend_weights.json')), balance=0)
+NN = os.environ.get('CMI_NN', ','.join(DEP['nn'])).split(',')
+GB = os.environ.get('CMI_GB', DEP['gb'] or 'none')
+W = DEP['weights'] if GB != 'none' else {'full': 1.0, 'imu': 1.0}
 if os.environ.get('CMI_W'):
     w = [float(x) for x in os.environ['CMI_W'].split(',')]
     W = {'full': w[0], 'imu': w[-1]}
+BAL = float(os.environ.get('CMI_BAL', DEP.get('balance', 0)))
+QUOTA = np.array(DEP.get('quota', [0.0] * 18))
 USE_NN, USE_GB = max(W.values()) > 0, min(W.values()) < 1
-SC = {k: Scaler.load(f'{P}/scalers/fold{k}.json') for k in range(5)}
-TREE_COLS = json.load(open(f'{P}/tree_columns.json')) if os.path.exists(f'{P}/tree_columns.json') else \
-    [c for c in pq.read_schema(f'{P}/tree_full.parquet').names if c != 'sequence_id']
-GBS = [joblib.load(f) for f in sorted(glob.glob(f'{RUNS}/{GB}/model_s*_f*.joblib'))] if USE_GB else []
-NETS = {'full': [], 'imu': []}
-for v in NETS if USE_NN else ():
-    for f in sorted(glob.glob(f'{RUNS}/{NN}/{v}_s*_f*.pt')):
+
+
+def data_dir(mirror):
+    d = f'{RUNS}/processed_mirror' if mirror else f'{RUNS}/processed'
+    return d if os.path.isdir(d) else f'{CODE}/data/processed' + ('_mirror' if mirror else '')
+
+
+META = {m: json.load(open(f'{data_dir(m)}/meta.json')) for m in (False, True) if os.path.isdir(data_dir(m))}
+SC = {m: {k: Scaler.load(f'{data_dir(m)}/scalers/fold{k}.json') for k in range(5)} for m in META}
+NETS = {(n, v): [] for n in NN for v in ('full', 'imu')} if USE_NN else {}
+for (n, v), lst in NETS.items():
+    for f in sorted(glob.glob(f'{RUNS}/{n}/{v}_s*_f*.pt')):
         ck = torch.load(f, map_location='cpu')
         cfg = dict(ck['cfg'])
         net = ARCH[cfg.pop('core')](**cfg)
         net.load_state_dict(ck['sd'])
-        NETS[v].append((net.eval(), int(f.rsplit('_f', 1)[1][:-3])))
+        lst.append((net.eval(), int(f.rsplit('_f', 1)[1][:-3]), bool(ck.get('mirror_left', False))))
+    assert lst, f'no {v} checkpoints in {RUNS}/{n}/ (only runs trained with --save have them)'
+GBS = [joblib.load(f) for f in sorted(glob.glob(f'{RUNS}/{GB}/model_s*_f*.joblib'))] if USE_GB else []
 assert not USE_GB or GBS, f'no fitted models in {RUNS}/{GB}/ (only runs trained with --save have them)'
-assert not USE_NN or (NETS['full'] and NETS['imu']), f'no checkpoints in {RUNS}/{NN}/ (only runs trained with --save)'
-print(f'SUBMITTING: network {NN if USE_NN else "-"} ({len(NETS["full"])}+{len(NETS["imu"])} checkpoints), '
-      f'trees {GB if USE_GB else "-"} ({len(GBS)} models), weight on network {W}', flush=True)
+assert not USE_GB or GB != 'none', 'CMI_W < 1 needs a tree model (CMI_GB)'
+TREE_COLS = None
+if USE_GB:                                                    # the column order the tree models were fitted with
+    p = data_dir(False)
+    TREE_COLS = json.load(open(f'{p}/tree_columns.json')) if os.path.exists(f'{p}/tree_columns.json') else \
+        [c for c in pd.read_parquet(f'{p}/tree_full.parquet').columns if c != 'sequence_id']
+COUNTS = defaultdict(lambda: np.zeros(18))                    # per person: gestures predicted so far
+print(f'SUBMITTING: networks {NN if USE_NN else "-"} '
+      f'({", ".join(str(len(c)) for c in NETS.values())} checkpoints per network x sensor setting), '
+      f'trees {GB if USE_GB else "-"} ({len(GBS)} models), weight on networks {W}, balancing strength {BAL}, '
+      f'mirrored inputs for {sorted({n for (n, _), c in NETS.items() if c[0][2]})}', flush=True)
 
 
 @torch.no_grad()
 def predict(sequence, demographics) -> str:
-    out = preprocess(sequence, demographics)                 # the same code that built the training features
-    f = out.features
+    feats = {}
+
+    def features(mirror):                                     # the same code that built the training features
+        if mirror not in feats:
+            feats[mirror] = preprocess(sequence, demographics, PipelineConfig(mirror_left=mirror)).features
+        return feats[mirror]
+
+    f = features(False)
     v = 'imu' if f['thm_missing'].iloc[0] and f['tof_missing'].iloc[0] else 'full'
     p = 0.0
     if W[v] > 0:
-        pn = []
-        for net, k in NETS[v]:
-            x, m = fixed_length(SC[k].transform(f), L)       # fold-k scaler, exactly as in training
-            pn.append(net(torch.tensor(x)[None], torch.tensor(m)[None])[0].softmax(1)[0].numpy())
-        p = p + W[v] * np.mean(pn, axis=0)
+        per_net = []
+        for n in NN:
+            pn = []
+            for net, k, mirror in NETS[(n, v)]:
+                x, m = fixed_length(SC[mirror][k].transform(features(mirror)), META[mirror]['fixed_length'])
+                pn.append(net(torch.tensor(x)[None], torch.tensor(m)[None])[0].softmax(1)[0].numpy())
+            per_net.append(np.mean(pn, axis=0))
+        p = p + W[v] * np.mean(per_net, axis=0)
     if W[v] < 1:
         row = pd.DataFrame([tree_summary(f)])[TREE_COLS]
         p = p + (1 - W[v]) * np.mean([g.predict_proba(row)[0] for g in GBS], axis=0)
-    return GESTURES[int(np.argmax(p))]
+    person = None                                             # the wearer, for per-person balancing
+    for t in (sequence, demographics):
+        t = t.to_pandas() if hasattr(t, 'to_pandas') else t
+        if person is None and t is not None and 'subject' in t and len(t):
+            person = str(t['subject'].iloc[0])
+    if person is not None:
+        p = adjust(p, COUNTS[person], QUOTA, BAL)
+    g = int(np.argmax(p))
+    if person is not None:
+        COUNTS[person][g] += 1
+    return GESTURES[g]
 
 
 try:

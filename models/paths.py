@@ -4,7 +4,7 @@ results/
   01_model_comparison/        every model on the competition metric, architectures, seeds, binary vs macro F1
   02_hyperparameter_tuning/   nested Optuna settings + trials, default vs tuned
   03_ablations/               component ablations, N1 (mirroring), N3 (routing)
-  04_hybrids_and_ensembles/   blends, stacker, ensembles, the deployed blend
+  04_hybrids_and_ensembles/   blends, stacker, the final ensemble, per-person balancing, what is deployed
   05_error_analysis/          per model: per-class F1, confusion matrices, per person, per posture
   06_validation/              shuffled-label check, the fold split, run info, data-build evidence
 Each folder has its CSV/JSON tables and a figures/ sub-folder (PNG)."""
@@ -26,7 +26,7 @@ RUN_INFO = VALIDATION / 'run_info.json'
 TAG_DIR = {'main': COMPARISON, 'arch_default': COMPARISON,
            'tuning': TUNING, 'tuning_nn': TUNING, 'tuning_gb': TUNING,
            'ablations': ABLATIONS, 'n1': ABLATIONS, 'routing': ABLATIONS,
-           'hybrids': HYBRIDS, 'ensembles_exploratory': HYBRIDS,
+           'hybrids': HYBRIDS, 'final': HYBRIDS, 'balancing': HYBRIDS,
            'sanity': VALIDATION}
 
 

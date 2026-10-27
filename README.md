@@ -13,12 +13,18 @@ only. The score is ½ binary F1 (BFRB or not) + ½ macro F1 (which BFRB).
 | Model | Combined score [95% CI] |
 | --- | --- |
 | **N1: tuned CNN-BiGRU with left-handed wearers mirrored** | **0.838** [0.824, 0.850] |
-| H1: tuned CNN-BiGRU + LightGBM blend (current submission) | 0.828 [0.814, 0.841] |
+| H1: tuned CNN-BiGRU + LightGBM blend (first submission: public LB 0.844, private 0.823) | 0.828 [0.814, 0.841] |
 | Tuned CNN-BiGRU | 0.825 [0.812, 0.838] |
 | LightGBM on 795 summary features | 0.773 [0.760, 0.785] |
 
-The full tables, statistics and 17 figures are in **[results/](results/README.md)**, in one folder per question:
+The full tables, statistics and figures are in **[results/](results/README.md)**, in one folder per question:
 model comparison, hyper-parameter tuning, ablations, hybrids and ensembles, error analysis, and validation.
+
+**Final model (trained by `run_all --final`, see [TRAINING.md](TRAINING.md#pass-3-the-final-model)):** the tuned
+CNN-BiGRU, the BiGRU and the Transformer, each trained on left-hand-mirrored data (N1), averaged with equal weights,
+plus per-person balancing at test time. LightGBM is dropped: on the Pass 2 predictions it no longer helps once the
+networks are averaged (0.845 → 0.844). Estimated from the Pass 2 predictions (only one of the three networks was
+mirrored there): ensemble 0.845, balancing +0.006 (20/20 replays, 5/5 folds).
 
 ## Repository
 
@@ -28,6 +34,7 @@ models/               one file per model + shared code
   seqnet.py             shared network blocks; cnn.py gru.py transformer.py cnn_gru.py (main)
   lgbm.py xgb.py rf.py mlp.py   summary-feature models
   hybrids.py            blend / stacker / trees-on-network-outputs
+  balance.py            per-person balancing at test time (post-processing)
   evaluate.py           tables, bootstrap CIs, Holm-corrected comparisons, error analysis
   report_figures.py     the figures in results/*/figures/
   paths.py              where every result file lives
@@ -44,7 +51,7 @@ Everything runs on a free Kaggle GPU notebook. **[TRAINING.md](TRAINING.md)** ha
 
 ```
 python run_pipeline.py --data <competition data>          # tests, build, parity + quality checks (~5 min)
-python -m models.train.run_all --data-zip <competition data> --tune --ablations --sanity --n1
+python -m models.train.run_all --data-zip <competition data> --final --ablations --sanity   # --final implies --tune --n1
 python -m models.report_figures                           # figures from results/*.csv
 ```
 
@@ -53,7 +60,7 @@ python -m models.report_figures                           # figures from results
 - **Folds:** 5 folds split by person (the test set has new people), pinned in `results/06_validation/folds_used.csv`.
 - **No selection on reported folds:** the epoch count is fixed in advance, the EMA weights from the last epoch are reported, and nothing is chosen on a reported fold.
 - **Nested tuning:** tuning uses only folds 1-4. Fold 0 is untouched and reported separately.
-- **Hybrids** are fitted on other folds' out-of-fold predictions only.
+- **Hybrids** are fitted on other folds' out-of-fold predictions only. The balancing strength is chosen on other folds too.
 - **Uncertainty:** 3 seeds; 95% confidence intervals from resampling people; Holm correction across comparisons.
 - **Checks:** a shuffled-label control, parity between the training and Kaggle code paths, and 23 data-quality checks.
 
@@ -65,6 +72,7 @@ from public competition write-ups:
   ([Speaker Deck](https://speakerdeck.com/rist/cmi-detect-behavior-with-sensor-data)).
 - **Late sensor fusion, sensor-availability-specific models, and CNN-RNN hybrids:** competition summary
   ([Medium](https://medium.com/@nlztrk/my-competition-summary-cmi-detect-behavior-with-sensor-data-8215c710e2f3)).
+- **Per-person balancing of predictions:** 7th-place talk (same link); our rule and its nested evaluation are our own.
 - **Augmentation choices:** top-solution notes
   ([Zenn](https://zenn.dev/ottantachinque/articles/2025-09-14_cmi-detect-behavior-with-sensor-data)).
 

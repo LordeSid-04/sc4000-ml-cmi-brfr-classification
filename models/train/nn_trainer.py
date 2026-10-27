@@ -37,7 +37,7 @@ def parse(core, argv=None):
     ap.add_argument('--aug', type=int, default=1, help='use the pre-computed augmented copies if present')
     ap.add_argument('--drop-sub', nargs='*', default=[], help='zero columns whose name contains any of these')
     ap.add_argument('--shuffle-labels', action='store_true', help='sanity check: train on permuted labels')
-    ap.add_argument('--save', action='store_true', help='keep model weights (needed only for the deployed model)')
+    ap.add_argument('--save', action='store_true', help='keep model weights (needed for every deployed model)')
     a = ap.parse_args(argv)
     a.hp = {**HP, **(json.load(open(a.params))['params'] if a.params else {}),
             **{k: getattr(a, k) for k in HP if getattr(a, k) is not None}}
@@ -51,6 +51,7 @@ class Data:
         s.amp = s.dev == 'cuda'
         s.d, meta, s.seqs, s.feats, phase = load(data)
         s.cols, s.L = meta['feature_columns'], meta['fixed_length']
+        s.mirror = bool(meta['pipeline_config'].get('mirror_left', False))    # left-handers mirrored in this data?
         s.imu, s.prox, s.flags = groups(s.cols)
         s.keep = torch.tensor([0. if any(t in c for t in drop_sub) else 1. for c in s.cols], device=s.dev)
         X, n, P = shape(s.feats, phase, s.seqs, s.L)
@@ -121,7 +122,9 @@ class Data:
 
 def train(core, a):
     kinds = ['imu'] if a.variant == 'imu' else ['full', 'blank']
-    todo = [(s, k) for s in a.seeds for k in a.folds if not all(oof_path(a.name, kd, s, k).exists() for kd in kinds)]
+    done = lambda s, k: all(oof_path(a.name, kd, s, k).exists() for kd in kinds) and \
+        (not a.save or (Path('runs') / a.name / f'{a.variant}_s{s}_f{k}.pt').exists())    # --save also needs the weights
+    todo = [(s, k) for s in a.seeds for k in a.folds if not done(s, k)]
     if not todo:
         print(f'{a.name} {a.variant}: all requested runs already done', flush=True)
         return
@@ -136,7 +139,7 @@ def train(core, a):
             save_oof(a.name, kind, seed, k, p)
         if a.save:
             torch.save({'cfg': dict(core=core, imu=D.imu, prox=[] if a.variant == 'imu' else D.prox, L=D.L,
-                                    d=a.hp['d'], drop=a.hp['drop']), 'sd': model.state_dict()},
+                                    d=a.hp['d'], drop=a.hp['drop']), 'sd': model.state_dict(), 'mirror_left': D.mirror},
                        Path('runs') / a.name / f'{a.variant}_s{seed}_f{k}.pt')
         y = D.Y[va].cpu().numpy()
         print(f'{a.name} {a.variant} seed {seed} fold {k}: ' +

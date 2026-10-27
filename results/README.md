@@ -70,7 +70,7 @@ folds 1-4: 12 trials for the network, 20 for LightGBM.
 | File | Content |
 | --- | --- |
 | `table_ablations.csv`, `compare_ablations.csv` | The default CNN-BiGRU without augmentation, without the phase loss (N2), and without the ToF 3x3 region features |
-| `table_n1.csv`, `compare_n1.csv` | N1: the same tuned model trained on left-hand-mirrored data |
+| `table_n1.csv`, `compare_n1.csv` | N1: each architecture trained on left-hand-mirrored data vs the same model unmirrored (the BiGRU and Transformer pairs appear after Pass 3) |
 | `compare_routing.csv` | N3: dedicated motion-only model vs the all-sensor model with its sensors switched off |
 
 Figures:
@@ -93,8 +93,11 @@ Figures:
 | File | Content |
 | --- | --- |
 | `table_hybrids.csv`, `compare_hybrids.csv` | H1 weighted blend, H2 logistic stacker, H3 LightGBM on network outputs; all fitted on out-of-fold predictions only |
-| `blend_weights.json`, `deploy.json` | The deployed submission: H1, weight 0.60 (all sensors) / 0.80 (motion only) on the network |
-| `*_ensembles_exploratory.csv` | Equal-weight ensembles (exploratory: chosen after seeing CV) |
+| `blend_weights.json` | H1 weights: 0.60 (all sensors) / 0.80 (motion only) on the network |
+| `deploy.json` | What the submission runs (networks, tree model, weights, balancing strength, per-person quota) |
+| `*_ensembles_exploratory.csv` | Equal-weight ensembles (exploratory: chosen after seeing CV). Pass 3 replaces them with the pre-specified final ensemble |
+| `table_final.csv`, `compare_final.csv` | After Pass 3: the final ensemble vs its three members, H1 and the tuned CNN-BiGRU |
+| `table_balancing.csv` | After Pass 3: per-person balancing off vs on (strength chosen on other folds, 20 replays of the test server) |
 
 Figures:
 - `hybrids`
@@ -103,6 +106,11 @@ Figures:
 **Findings:**
 - H1 adds +0.003 (significant), all of it with all sensors.
 - Mixing architectures (N1 + BiGRU + Transformer = 0.845) adds more than mixing views.
+- Checked on these predictions before choosing the final model (all fitted on other folds):
+  - LightGBM on top of the 3-network average: 0.845 → 0.844, so the final model drops it.
+  - Summing the 18 gesture probabilities into the 9 scored classes before the argmax: -0.005 (not used).
+  - Per-class decision weights: +0.001 (not worth the extra fitting).
+  - Per-person balancing: +0.006, better in 20/20 replays and 5/5 folds (used).
 
 ### 05_error_analysis: where do models still fail?
 
@@ -136,5 +144,8 @@ Regenerate every figure with `python -m models.report_figures` (it reads only th
 ## Caveats to state in the report
 
 - **N1's mirror transform** was chosen by the team after inspecting all subjects' labels, though it is the physically expected mirror image. The comparison is otherwise clean: same folds, model and settings, with mirroring the only difference.
-- **The ensembles are exploratory:** chosen after seeing CV. **N1 is not deployed yet.** Its weights were not saved.
+- **The exploratory ensembles** were chosen after seeing CV. The final ensemble (Pass 3) was then fixed in advance as
+  the three architectures that each have a mirrored version; its own score is still informed by that exploration.
+- **Balancing** relies on every test participant following the training protocol (8 of each BFRB per person).
+  It uses only the person's earlier predictions, never labels.
 - **All of this is cross-validation.** The leaderboard score comes from the Kaggle submission.

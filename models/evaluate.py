@@ -6,7 +6,9 @@
   python -m models.evaluate analysis cnn_gru                # per-class F1, confusion matrix, per-person, per-posture
   python -m models.evaluate seeds cnn_gru lgbm ...          # each seed alone vs the seed average
   python -m models.evaluate breakdown cnn_gru lgbm ...      # binary F1 (BFRB or not) vs macro F1 (which BFRB)
+  python -m models.evaluate pairs n1_gru,gru n1_transformer,transformer   # each a vs b (Holm over the pairs)
   python -m models.evaluate ensemble NAME a b c             # equal-weight average of runs (no fitting) -> runs/NAME
+  python -m models.evaluate deploy final n1_mirror n1_gru n1_transformer   # the submission: ensemble + balancing
 
 'name:blank' = the all-sensor model evaluated with its sensors switched off (routing vs one model).
 full / imu / combined = competition score on all-sensor inputs, motion-only inputs, and both pooled (ranks models).
@@ -20,7 +22,8 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import confusion_matrix, f1_score
 
-from models.common import SID, bootstrap, combined, get, holm, load_oof, pvalue, save_oof, score
+from models.balance import STRENGTHS, quota, simulate
+from models.common import SID, bootstrap, combined, get, holm, load_oof, pvalue, save_oof, score, score_ids
 from models.hybrids import best_weight, fit_predict
 from models.paths import COMPARISON, ERRORS, HYBRIDS, out_dir
 from preprocessing.constants import SCORE_CLASSES
@@ -49,20 +52,34 @@ def table(names, seqs, y, fold, subj, tag=None):
 
 def compare(ref, *others, seqs=None, y=None, fold=None, subj=None, tag=None):
     """Is `ref` better than each other model? Paired subject bootstrap; Holm correction over the comparisons."""
-    preds = {n: get(n, fold) for n in (ref, *others)}
+    pairs([(ref, o) for o in others], y=y, fold=fold, subj=subj, tag=tag, fname=tag or ref.replace(':', '-'))
+
+
+def pairs(todo, y=None, fold=None, subj=None, tag=None, fname=None, **_):
+    """Is a better than b, for each (a, b)? Paired subject bootstrap; Holm correction over the pairs."""
+    names = list(dict.fromkeys(n for ab in todo for n in ab))
+    preds = {n: get(n, fold) for n in names}
     bs = bootstrap(y, subj, preds, n=2000)
     rows = []
-    for o in others:
-        d = bs[ref] - bs[o]
-        wins = sum(combined(y[fold == k], *[p[fold == k] for p in preds[ref]]) >
-                   combined(y[fold == k], *[p[fold == k] for p in preds[o]]) for k in range(5))
-        rows.append(dict(comparison=f'{ref} - {o}', delta=combined(y, *preds[ref]) - combined(y, *preds[o]),
+    for a, b in todo:
+        d = bs[a] - bs[b]
+        wins = sum(combined(y[fold == k], *[p[fold == k] for p in preds[a]]) >
+                   combined(y[fold == k], *[p[fold == k] for p in preds[b]]) for k in range(5))
+        rows.append(dict(comparison=f'{a} - {b}', delta=combined(y, *preds[a]) - combined(y, *preds[b]),
                          lo=np.percentile(d, 2.5), hi=np.percentile(d, 97.5), p=pvalue(d), folds_won=f'{wins}/5'))
     df = pd.DataFrame(rows)
     df['p_holm'] = holm(df['p'])
     df['significant'] = df['p_holm'] < 0.05
     print(df.round(4).to_string(index=False), flush=True)
-    df.round(5).to_csv(out_dir(tag) / f'compare_{tag or ref.replace(":", "-")}.csv', index=False)
+    df.round(5).to_csv(out_dir(tag) / f'compare_{fname or tag}.csv', index=False)
+
+
+def write_deploy(nn, gb, weights, balance, q):
+    """runs/deploy.json is everything submission/submit.py needs to know (copied to results/ for the record)."""
+    d = dict(nn=list(nn), gb=gb, weights=weights, balance=balance, quota=[float(v) for v in q])
+    for p in (Path('runs'), HYBRIDS):
+        p.mkdir(parents=True, exist_ok=True)
+        json.dump(d, open(p / 'deploy.json', 'w'), indent=1)
 
 
 def hybrid(a, b, seqs, y, fold, subj):
@@ -73,7 +90,7 @@ def hybrid(a, b, seqs, y, fold, subj):
     for p in (Path('runs'), HYBRIDS):                           # runs/ is uploaded together with the models
         p.mkdir(parents=True, exist_ok=True)
         json.dump(w, open(p / 'blend_weights.json', 'w'))
-        json.dump({'nn': a, 'gb': b}, open(p / 'deploy.json', 'w'))
+    write_deploy([a], b, w, 0, quota(seqs))
     print(f'deployed blend: weight on {a} = {w["full"]:.2f} (all sensors), {w["imu"]:.2f} (motion-only)')
     names = []
     for h in outs[0]:
@@ -161,6 +178,39 @@ def ensemble(name, *members, seqs=None, y=None, fold=None, subj=None):
     print(f'{name} = mean of {", ".join(members)}: combined {combined(y, *get(name, fold)):.4f}')
 
 
+def deploy(name, *members, seqs=None, y=None, fold=None, subj=None):
+    """The submission: `name` = equal-weight ensemble of `members` (run `ensemble` first), plus per-person balancing
+    (models/balance.py). The balancing strength for each fold is chosen on the other folds only; the test server is
+    replayed 20 times (random order and random all-sensor / motion-only per recording), and 'off' and 'on' see the
+    same 20 replays, so the difference is paired. Writes runs/deploy.json."""
+    pf, pi = get(name, fold)
+    q, subj = quota(seqs), np.asarray(subj)
+    run = lambda m, a, r: score_ids(SID[y[m]], SID[simulate(pf[m], pi[m], subj[m], q, a, r)])
+    pick = lambda m: max(STRENGTHS, key=lambda a: np.mean([run(m, a, r) for r in range(3)]))
+    chosen = [pick(fold != k) for k in range(5)]
+    res = {'off': [], 'on': []}
+    folds = {'off': np.zeros(5), 'on': np.zeros(5)}
+    for r in range(100, 120):
+        for kind in res:
+            pred = np.zeros(len(y), int)
+            for k in range(5):
+                m = fold == k
+                pred[m] = simulate(pf[m], pi[m], subj[m], q, chosen[k] if kind == 'on' else 0, r)
+                folds[kind][k] += score_ids(SID[y[m]], SID[pred[m]]) / 20
+            res[kind].append(score_ids(SID[y], SID[pred]))
+    d = np.subtract(res['on'], res['off'])
+    df = pd.DataFrame([dict(model=name, balancing=k, score=np.mean(v), sd_over_replays=np.std(v),
+                            strength_per_fold=' '.join(map(str, chosen)) if k == 'on' else '0') for k, v in res.items()])
+    df['delta'] = [0.0, d.mean()]
+    df['replays_improved'] = ['', f'{(d > 0).sum()}/20']
+    df['folds_won'] = ['', f'{(folds["on"] > folds["off"]).sum()}/5']
+    print(df.round(4).to_string(index=False), flush=True)
+    df.round(5).to_csv(out_dir('balancing') / 'table_balancing.csv', index=False)
+    a = pick(np.ones(len(y), bool))
+    write_deploy(members, None, {'full': 1.0, 'imu': 1.0}, a, q)
+    print(f'deployed: equal-weight ensemble of {", ".join(members)}; balancing strength {a}')
+
+
 if __name__ == '__main__':
     cmd, args = sys.argv[1], sys.argv[2:]
     tag = None
@@ -176,5 +226,9 @@ if __name__ == '__main__':
         {'seeds': seeds, 'breakdown': breakdown}[cmd](args, seqs, y, fold, subj)
     elif cmd == 'ensemble':
         ensemble(*args, seqs=seqs, y=y, fold=fold, subj=subj)
+    elif cmd == 'deploy':
+        deploy(*args, seqs=seqs, y=y, fold=fold, subj=subj)
+    elif cmd == 'pairs':
+        pairs([tuple(a.split(',')) for a in args], y=y, fold=fold, subj=subj, tag=tag)
     else:
         {'hybrid': hybrid, 'analysis': analysis}[cmd](*args, seqs, y, fold, subj)

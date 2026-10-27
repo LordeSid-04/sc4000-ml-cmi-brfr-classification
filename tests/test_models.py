@@ -85,3 +85,20 @@ def test_tree_builders_accept_tuned_settings(model):
     params = m.get_params()
     assert any(params.get(k) == v or params.get(f'{m.steps[-1][0]}__{k}' if hasattr(m, 'steps') else k) == v
                for k, v in kw.items())
+
+
+def test_balancing_only_moves_used_up_gestures():
+    from models.balance import adjust, quota, simulate
+    seqs = pd.DataFrame({'subject': ['a'] * 4 + ['b'] * 4, 'gesture_id': [0, 0, 1, 2, 0, 0, 1, 3]})
+    q = quota(seqs)
+    assert q[0] == 2 and q[1] == 1 and len(q) == 18
+    p = np.full(18, 0.01)
+    p[0], p[1] = 0.5, 0.4
+    assert np.array_equal(adjust(p, np.zeros(18), q, 0), p)                    # strength 0 = off
+    assert adjust(p, np.zeros(18), q, 2).argmax() == 0                        # nothing used yet: unchanged choice
+    c = np.zeros(18)
+    c[0] = 3                                                                  # gesture 0 already used up
+    assert adjust(p, c, q, 2).argmax() == 1
+    y = np.array([0, 0, 1, 2, 0, 0, 1, 3])
+    pf = np.eye(18)[y] * 0.9 + 0.005
+    assert np.array_equal(simulate(pf, pf, seqs['subject'].to_numpy(), q, 0, 0), y)   # confident and right: kept

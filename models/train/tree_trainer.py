@@ -46,7 +46,8 @@ def fit(model, seed, trees, kw, Xf, Xi, y, tr, va, shuffle=False):
 
 def train(model, a):
     todo = [(s, k) for s in a.seeds for k in a.folds
-            if not all(oof_path(a.name, kd, s, k).exists() for kd in ('full', 'imu'))]
+            if not all(oof_path(a.name, kd, s, k).exists() for kd in ('full', 'imu'))
+            or (a.save and not (Path('runs') / a.name / f'model_s{s}_f{k}.joblib').exists())]   # --save needs the model
     if not todo:
         print(f'{a.name}: all requested runs already done', flush=True)
         return
