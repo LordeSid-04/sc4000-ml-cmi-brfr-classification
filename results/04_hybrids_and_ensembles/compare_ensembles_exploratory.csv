@@ -1,4 +1,0 @@
-comparison,delta,lo,hi,p,folds_won,p_holm,significant
-n1_mirror - ens_n1_gru_transformer,-0.00724,-0.01172,-0.00297,0.002,1/5,0.006,True
-n1_mirror - ens_networks,-0.00092,-0.00703,0.00507,0.747,2/5,0.747,False
-n1_mirror - ens_n1_cnn_gru_tuned,-0.0028,-0.00568,5e-05,0.057,1/5,0.114,False

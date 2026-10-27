@@ -1,0 +1,10 @@
+,Above ear - pull hair,Forehead - pull hairline,Forehead - scratch,Eyebrow - pull hair,Eyelash - pull hair,Neck - pinch skin,Neck - scratch,Cheek - pinch skin,non_target
+Above ear - pull hair,538,11,4,12,4,23,16,15,15
+Forehead - pull hairline,12,516,34,43,7,2,3,7,16
+Forehead - scratch,3,26,562,28,7,1,6,4,3
+Eyebrow - pull hair,14,81,31,365,98,4,4,33,8
+Eyelash - pull hair,18,13,13,117,395,6,6,63,9
+Neck - pinch skin,37,2,0,2,7,466,71,48,7
+Neck - scratch,18,2,6,1,6,92,486,24,5
+Cheek - pinch skin,17,6,4,30,50,53,25,441,11
+non_target,1,2,2,4,0,1,6,1,3021

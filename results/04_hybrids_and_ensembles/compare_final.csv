@@ -1,0 +1,6 @@
+comparison,delta,lo,hi,p,folds_won,p_holm,significant
+final - n1_mirror,0.01029,0.00715,0.01381,0.0,5/5,0.0,True
+final - n1_gru,0.01379,0.01057,0.01724,0.0,5/5,0.0,True
+final - n1_transformer,0.02019,0.01656,0.02387,0.0,5/5,0.0,True
+final - h1_cnn_gru_tuned_lgbm_tuned,0.01975,0.01365,0.02606,0.0,5/5,0.0,True
+final - cnn_gru_tuned,0.02245,0.01612,0.02935,0.0,5/5,0.0,True

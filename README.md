@@ -12,7 +12,8 @@ only. The score is ½ binary F1 (BFRB or not) + ½ macro F1 (which BFRB).
 
 | Model | Combined score [95% CI] |
 | --- | --- |
-| **N1: tuned CNN-BiGRU with left-handed wearers mirrored** | **0.838** [0.824, 0.850] |
+| **Final (submitted): 3 mirrored networks averaged, + per-person balancing** | **0.848** [0.834, 0.861]; balancing +0.005 → 0.853 (replayed test server) |
+| N1: tuned CNN-BiGRU with left-handed wearers mirrored | 0.838 [0.824, 0.850] |
 | H1: tuned CNN-BiGRU + LightGBM blend (first submission: public LB 0.844, private 0.823) | 0.828 [0.814, 0.841] |
 | Tuned CNN-BiGRU | 0.825 [0.812, 0.838] |
 | LightGBM on 795 summary features | 0.773 [0.760, 0.785] |
@@ -20,11 +21,12 @@ only. The score is ½ binary F1 (BFRB or not) + ½ macro F1 (which BFRB).
 The full tables, statistics and figures are in **[results/](results/README.md)**, in one folder per question:
 model comparison, hyper-parameter tuning, ablations, hybrids and ensembles, error analysis, and validation.
 
-**Final model (trained by `run_all --final`, see [TRAINING.md](TRAINING.md#pass-3-the-final-model)):** the tuned
+**Final model (Pass 3, `run_all --final`, see [TRAINING.md](TRAINING.md#pass-3-the-final-model)):** the tuned
 CNN-BiGRU, the BiGRU and the Transformer, each trained on left-hand-mirrored data (N1), averaged with equal weights,
-plus per-person balancing at test time. LightGBM is dropped: on the Pass 2 predictions it no longer helps once the
-networks are averaged (0.845 → 0.844). Estimated from the Pass 2 predictions (only one of the three networks was
-mirrored there): ensemble 0.845, balancing +0.006 (20/20 replays, 5/5 folds).
+plus per-person balancing at test time. It beats every model, including N1 alone (+0.010) and the first submission H1
+(+0.020), in 5/5 folds. Mirroring helps all three architectures (+0.012, +0.012, +0.007; Holm-significant, 5/5 folds).
+Balancing adds +0.005 (strength chosen on other folds; better in 20/20 replays and 5/5 folds). LightGBM is dropped:
+it no longer helps once the networks are averaged.
 
 ## Repository
 
